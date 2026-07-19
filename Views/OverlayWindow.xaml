@@ -1,0 +1,94 @@
+<Window x:Class="CryoChaos.Views.OverlayWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        WindowStyle="None"
+        ResizeMode="NoResize"
+        AllowsTransparency="True"
+        Background="Transparent"
+        Topmost="True"
+        ShowInTaskbar="False"
+        ShowActivated="False"
+        Focusable="False">
+    <Grid IsHitTestVisible="False">
+        <!-- Full-screen visual effects live here. -->
+        <Canvas x:Name="EffectCanvas"
+                Panel.ZIndex="0"
+                Background="Transparent" />
+
+        <!--
+            The HUD uses fixed device-independent pixel sizes instead of
+            percentages, so it stays the same physical size on every resolution.
+        -->
+        <Grid x:Name="HudRoot"
+              Panel.ZIndex="10000"
+              Width="720"
+              HorizontalAlignment="Center"
+              VerticalAlignment="Top"
+              Margin="0,18,0,0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <Border Grid.Row="0"
+                    Height="34"
+                    Background="#E6101116"
+                    BorderBrush="#F0FFFFFF"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="4">
+                <Grid>
+                    <ProgressBar x:Name="NextEffectProgressBar"
+                                 Minimum="0"
+                                 Maximum="100"
+                                 Value="0"
+                                 Height="24"
+                                 Background="#FF242833"
+                                 Foreground="#FF7C5CFC"
+                                 BorderThickness="0" />
+
+                    <TextBlock x:Name="NextEffectTextBlock"
+                               Text="CHAOS STOPPED"
+                               Foreground="White"
+                               FontSize="14"
+                               FontWeight="SemiBold"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center" />
+                </Grid>
+            </Border>
+
+            <Border x:Name="CurrentEffectCard"
+                    Grid.Row="1"
+                    Width="330"
+                    MinHeight="78"
+                    HorizontalAlignment="Right"
+                    Margin="0,10,0,0"
+                    Padding="13,10"
+                    Background="#E6101116"
+                    BorderBrush="#F0FFFFFF"
+                    BorderThickness="1"
+                    CornerRadius="8">
+                <StackPanel>
+                    <TextBlock Text="CURRENT EFFECT"
+                               Foreground="#FFAAAFC0"
+                               FontSize="11"
+                               FontWeight="Bold" />
+
+                    <TextBlock x:Name="CurrentEffectNameTextBlock"
+                               Text="No active effect"
+                               Margin="0,4,0,0"
+                               Foreground="White"
+                               FontSize="18"
+                               FontWeight="Bold"
+                               TextWrapping="Wrap" />
+
+                    <TextBlock x:Name="CurrentEffectTimerTextBlock"
+                               Text="Waiting for the next effect"
+                               Margin="0,3,0,0"
+                               Foreground="#FFD7D9E2"
+                               FontSize="12" />
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Grid>
+</Window>
