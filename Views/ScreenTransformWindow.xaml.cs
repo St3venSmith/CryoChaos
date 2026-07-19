@@ -69,7 +69,7 @@ public partial class ScreenTransformWindow : Window
 
         _sourceTimer = new DispatcherTimer(DispatcherPriority.Render)
         {
-            Interval = TimeSpan.FromMilliseconds(100)
+            Interval = TimeSpan.FromMilliseconds(2)
         };
         _sourceTimer.Tick += SourceTimer_Tick;
 
