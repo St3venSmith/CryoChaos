@@ -16,6 +16,14 @@ public partial class OverlayWindow : Window
     private const int WsExToolWindow = 0x00000080;
     private const int WsExNoActivate = 0x08000000;
 
+    private const int WmNcHitTest = 0x0084;
+    private const int WmMouseActivate = 0x0021;
+
+    private static readonly IntPtr HtTransparent = new(-1);
+    private static readonly IntPtr MaNoActivate = new(3);
+
+    private HwndSource? _hwndSource;
+
     private readonly Dictionary<string, FrameworkElement> _activeElements =
         new(StringComparer.OrdinalIgnoreCase);
 
@@ -43,8 +51,8 @@ public partial class OverlayWindow : Window
         _hudTimer.Tick += (_, _) => RefreshCurrentEffectHud();
         _hudTimer.Start();
 
-        SourceInitialized += (_, _) => MakeClickThrough();
-        Closed += (_, _) => _hudTimer.Stop();
+        SourceInitialized += OverlayWindow_SourceInitialized;
+        Closed += OverlayWindow_Closed;
     }
 
     public void SetEngineRunning(bool running)
@@ -428,21 +436,75 @@ public partial class OverlayWindow : Window
             : $"00:{Math.Ceiling(time.TotalSeconds):00}";
     }
 
-    private void MakeClickThrough()
+    private void OverlayWindow_SourceInitialized(
+        object? sender,
+        EventArgs e)
     {
         WindowInteropHelper helper = new(this);
-        int style = GetWindowLong(helper.Handle, GwlExStyle);
+        MakeClickThrough(helper.Handle);
+
+        _hwndSource = HwndSource.FromHwnd(helper.Handle);
+        _hwndSource?.AddHook(WindowProcedure);
+    }
+
+    private void OverlayWindow_Closed(
+        object? sender,
+        EventArgs e)
+    {
+        _hudTimer.Stop();
+
+        if (_hwndSource is not null)
+        {
+            _hwndSource.RemoveHook(WindowProcedure);
+            _hwndSource = null;
+        }
+    }
+
+    private IntPtr WindowProcedure(
+        IntPtr window,
+        int message,
+        IntPtr wParam,
+        IntPtr lParam,
+        ref bool handled)
+    {
+        switch (message)
+        {
+            case WmNcHitTest:
+                handled = true;
+                return HtTransparent;
+
+            case WmMouseActivate:
+                handled = true;
+                return MaNoActivate;
+
+            default:
+                return IntPtr.Zero;
+        }
+    }
+
+    private static void MakeClickThrough(IntPtr window)
+    {
+        int style = GetWindowLong(window, GwlExStyle);
+
         SetWindowLong(
-            helper.Handle,
+            window,
             GwlExStyle,
-            style | WsExTransparent | WsExToolWindow | WsExNoActivate);
+            style |
+            WsExTransparent |
+            WsExToolWindow |
+            WsExNoActivate);
     }
 
     [DllImport("user32.dll")]
-    private static extern int GetWindowLong(IntPtr window, int index);
+    private static extern int GetWindowLong(
+        IntPtr window,
+        int index);
 
     [DllImport("user32.dll")]
-    private static extern int SetWindowLong(IntPtr window, int index, int newStyle);
+    private static extern int SetWindowLong(
+        IntPtr window,
+        int index,
+        int newStyle);
 
     private sealed record ActiveHudEffect(
         string Name,

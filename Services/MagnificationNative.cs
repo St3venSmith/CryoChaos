@@ -11,6 +11,10 @@ internal static class MagnificationNative
     internal const uint WsChild = 0x40000000;
     internal const uint WsVisible = 0x10000000;
 
+    internal const uint WsExTransparent = 0x00000020;
+    internal const uint WsExToolWindow = 0x00000080;
+    internal const uint WsExNoActivate = 0x08000000;
+
     internal const uint SwpNoZOrder = 0x0004;
     internal const uint SwpNoActivate = 0x0010;
     internal const uint SwpShowWindow = 0x0040;
@@ -200,6 +204,11 @@ internal static class MagnificationNative
 
     [DllImport("Magnification.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool MagShowSystemCursor(
+        [MarshalAs(UnmanagedType.Bool)] bool showCursor);
+
+    [DllImport("Magnification.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool MagInitialize();
 
     [DllImport("Magnification.dll", SetLastError = true)]
@@ -241,6 +250,13 @@ internal static class MagnificationNative
     internal static extern bool GetClientRect(
         IntPtr window,
         out NativeRect rectangle);
+
+    [DllImport("user32.dll", SetLastError = false)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool InvalidateRect(
+        IntPtr window,
+        IntPtr rectangle,
+        [MarshalAs(UnmanagedType.Bool)] bool erase);
 }
 
 [StructLayout(LayoutKind.Sequential)]

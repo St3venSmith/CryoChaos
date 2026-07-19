@@ -52,7 +52,13 @@ public sealed class ChaosEngine : IDisposable
             new SurpriseJumpEffect(),
             new ForcedCrouchEffect(),
             new WeaponPanicEffect(),
-            new StepBackwardEffect()
+            new StepBackwardEffect(),
+
+            new LookLeftEffect(),
+            new LookRightEffect(),
+            new LookUpEffect(),
+            new LookDownEffect(),
+            new CameraJoltEffect()
         ];
 
         Effects = new ObservableCollection<ChaosEffectDefinition>(

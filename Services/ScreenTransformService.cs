@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Windows.Interop;
+using System.Windows.Threading;
 using CryoChaos.Models;
 using CryoChaos.Views;
 
@@ -29,6 +30,7 @@ public sealed class ScreenTransformService : IScreenTransformService
     private readonly OverlayWindow _overlay;
     private readonly SemaphoreSlim _effectGate = new(1, 1);
     private readonly object _stateLock = new();
+    private readonly DispatcherTimer _zOrderTimer;
 
     private ScreenTransformWindow? _transformWindow;
     private bool _disposed;
@@ -36,6 +38,18 @@ public sealed class ScreenTransformService : IScreenTransformService
     public ScreenTransformService(OverlayWindow overlay)
     {
         _overlay = overlay;
+
+        // Reassert the two-window order while a live transform is active:
+        // Destiny -> transformed live view -> CryoChaos HUD/effect overlay.
+        // This prevents another topmost update from placing the copied view
+        // over the progress bar or current-effect card.
+        _zOrderTimer = new DispatcherTimer(DispatcherPriority.Send)
+        {
+            Interval = TimeSpan.FromMilliseconds(250)
+        };
+
+        _zOrderTimer.Tick += (_, _) =>
+            EnsureOverlayAboveTransform();
     }
 
     public bool IsActive
@@ -56,7 +70,8 @@ public sealed class ScreenTransformService : IScreenTransformService
     {
         if (_disposed)
         {
-            throw new ObjectDisposedException(nameof(ScreenTransformService));
+            throw new ObjectDisposedException(
+                nameof(ScreenTransformService));
         }
 
         await _effectGate.WaitAsync(cancellationToken);
@@ -98,8 +113,16 @@ public sealed class ScreenTransformService : IScreenTransformService
                     _transformWindow = window;
                 }
 
+                window.ContentRendered +=
+                    TransformWindow_ContentRendered;
+
+                window.Closed +=
+                    TransformWindow_Closed;
+
                 window.Show();
-                BringOverlayAboveTransform();
+
+                EnsureOverlayAboveTransform();
+                _zOrderTimer.Start();
             });
 
             try
@@ -129,8 +152,33 @@ public sealed class ScreenTransformService : IScreenTransformService
             CloseTransformWindowOnUiThread);
     }
 
+    private void TransformWindow_ContentRendered(
+        object? sender,
+        EventArgs e)
+    {
+        EnsureOverlayAboveTransform();
+    }
+
+    private void TransformWindow_Closed(
+        object? sender,
+        EventArgs e)
+    {
+        if (sender is ScreenTransformWindow window)
+        {
+            window.ContentRendered -=
+                TransformWindow_ContentRendered;
+
+            window.Closed -=
+                TransformWindow_Closed;
+        }
+
+        _zOrderTimer.Stop();
+    }
+
     private void CloseTransformWindowOnUiThread()
     {
+        _zOrderTimer.Stop();
+
         ScreenTransformWindow? window;
 
         lock (_stateLock)
@@ -139,22 +187,71 @@ public sealed class ScreenTransformService : IScreenTransformService
             _transformWindow = null;
         }
 
-        if (window is not null)
-        {
-            window.Close();
-        }
-    }
-
-    private void BringOverlayAboveTransform()
-    {
-        IntPtr overlayHandle =
-            new WindowInteropHelper(_overlay).Handle;
-
-        if (overlayHandle == IntPtr.Zero)
+        if (window is null)
         {
             return;
         }
 
+        window.ContentRendered -=
+            TransformWindow_ContentRendered;
+
+        window.Closed -=
+            TransformWindow_Closed;
+
+        window.Close();
+    }
+
+    private void EnsureOverlayAboveTransform()
+    {
+        if (_overlay.Dispatcher.HasShutdownStarted ||
+            _overlay.Dispatcher.HasShutdownFinished)
+        {
+            return;
+        }
+
+        ScreenTransformWindow? transformWindow;
+
+        lock (_stateLock)
+        {
+            transformWindow = _transformWindow;
+        }
+
+        if (transformWindow is null ||
+            !transformWindow.IsVisible)
+        {
+            return;
+        }
+
+        IntPtr transformHandle =
+            transformWindow.NativeHandle;
+
+        IntPtr overlayHandle =
+            new WindowInteropHelper(_overlay).Handle;
+
+        if (transformHandle == IntPtr.Zero ||
+            overlayHandle == IntPtr.Zero)
+        {
+            return;
+        }
+
+        const uint flags =
+            SwpNoMove |
+            SwpNoSize |
+            SwpNoActivate |
+            SwpShowWindow;
+
+        // Put the transformed live view in the topmost group first.
+        SetWindowPos(
+            transformHandle,
+            HwndTopmost,
+            0,
+            0,
+            0,
+            0,
+            flags);
+
+        // Then put the normal CryoChaos overlay after it. The most recent
+        // HWND_TOPMOST call sits above the previous topmost window.
         SetWindowPos(
             overlayHandle,
             HwndTopmost,
@@ -162,23 +259,25 @@ public sealed class ScreenTransformService : IScreenTransformService
             0,
             0,
             0,
-            SwpNoMove |
-            SwpNoSize |
-            SwpNoActivate |
-            SwpShowWindow);
+            flags);
     }
 
-
-    private static IReadOnlyList<IntPtr> GetCurrentProcessTopLevelWindows()
+    private static IReadOnlyList<IntPtr>
+        GetCurrentProcessTopLevelWindows()
     {
-        uint currentProcessId = (uint)Environment.ProcessId;
+        uint currentProcessId =
+            (uint)Environment.ProcessId;
+
         List<IntPtr> windows = [];
 
         EnumWindows((window, _) =>
         {
-            GetWindowThreadProcessId(window, out uint processId);
+            GetWindowThreadProcessId(
+                window,
+                out uint processId);
 
-            if (processId == currentProcessId && IsWindowVisible(window))
+            if (processId == currentProcessId &&
+                IsWindowVisible(window))
             {
                 windows.Add(window);
             }
@@ -197,6 +296,7 @@ public sealed class ScreenTransformService : IScreenTransformService
         }
 
         _disposed = true;
+        _zOrderTimer.Stop();
 
         if (!_overlay.Dispatcher.HasShutdownStarted &&
             !_overlay.Dispatcher.HasShutdownFinished)
@@ -212,6 +312,7 @@ public sealed class ScreenTransformService : IScreenTransformService
             }
         }
 
+        _effectGate.Dispose();
     }
 
     private delegate bool EnumWindowsCallback(
@@ -231,7 +332,8 @@ public sealed class ScreenTransformService : IScreenTransformService
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool IsWindowVisible(IntPtr window);
+    private static extern bool IsWindowVisible(
+        IntPtr window);
 
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]

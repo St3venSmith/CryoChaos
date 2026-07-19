@@ -49,21 +49,40 @@ public sealed class MagnifierHost : HwndHost
         ApplyConfiguration();
     }
 
-    internal void UpdateSourceRectangle(NativeRect sourceRectangle)
+    /// <summary>
+    /// Refreshes the live view using the latest Destiny client rectangle.
+    /// The source rectangle is set again because Destiny can move or resize,
+    /// and the native magnifier control is invalidated so Windows paints the
+    /// newest available frame.
+    /// </summary>
+    internal void RefreshFrame(NativeRect sourceRectangle)
     {
         _sourceRectangle = sourceRectangle;
 
-        if (_magnifierWindow != IntPtr.Zero)
+        if (_magnifierWindow == IntPtr.Zero)
         {
-            if (!MagnificationNative.MagSetWindowSource(
-                    _magnifierWindow,
-                    sourceRectangle))
-            {
-                throw new Win32Exception(
-                    Marshal.GetLastWin32Error(),
-                    "The magnifier source rectangle could not be updated.");
-            }
+            return;
         }
+
+        if (!MagnificationNative.MagSetWindowSource(
+                _magnifierWindow,
+                sourceRectangle))
+        {
+            throw new Win32Exception(
+                Marshal.GetLastWin32Error(),
+                "The magnifier source rectangle could not be updated.");
+        }
+
+        MagnificationNative.InvalidateRect(
+            _magnifierWindow,
+            IntPtr.Zero,
+            erase: false);
+    }
+
+    // Retained for compatibility with any older call sites.
+    internal void UpdateSourceRectangle(NativeRect sourceRectangle)
+    {
+        RefreshFrame(sourceRectangle);
     }
 
     protected override HandleRef BuildWindowCore(HandleRef hwndParent)
@@ -71,10 +90,18 @@ public sealed class MagnifierHost : HwndHost
         MagnificationNative.AcquireRuntime();
         _runtimeAcquired = true;
 
+        // Keep the real system cursor visible while the copied live view is
+        // shown. The call is harmless if Windows already has it visible.
+        MagnificationNative.MagShowSystemCursor(true);
+
         try
         {
+            uint clickThroughStyle =
+                MagnificationNative.WsExTransparent |
+                MagnificationNative.WsExNoActivate;
+
             _hostWindow = MagnificationNative.CreateWindowEx(
-                0,
+                clickThroughStyle,
                 "static",
                 "CryoChaosMagnifierHost",
                 MagnificationNative.WsChild |
@@ -96,7 +123,7 @@ public sealed class MagnifierHost : HwndHost
             }
 
             _magnifierWindow = MagnificationNative.CreateWindowEx(
-                0,
+                clickThroughStyle,
                 MagnificationNative.MagnifierWindowClass,
                 "CryoChaosLiveTransform",
                 MagnificationNative.WsChild |
@@ -223,6 +250,11 @@ public sealed class MagnifierHost : HwndHost
                 Marshal.GetLastWin32Error(),
                 "CryoChaos windows could not be excluded from the live capture.");
         }
+
+        MagnificationNative.InvalidateRect(
+            _magnifierWindow,
+            IntPtr.Zero,
+            erase: false);
     }
 
     private void DestroyNativeWindows()

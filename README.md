@@ -1,72 +1,31 @@
-# CryoChaos
+# CryoChaos Keybind Mouse Movement Patch
 
-A .NET 8 WPF starter project for a Destiny 2 chaos controller.
+Replace these files in your current project:
 
-## Included
+- `Services/KeyboardInputService.cs`
+- `Effects/KeybindEffects.cs`
+- `Services/ChaosEngine.cs`
 
-- Low, Normal, and Chaos tiers.
-- Higher tiers inherit all lower-tier effects.
-- Graphic effects rendered through a transparent, click-through overlay.
-- Keybind effects that use the player's detected Destiny bindings.
-- Automatic read-only monitoring of:
+Then clean and rebuild the solution.
 
-  `%APPDATA%\Bungie\DestinyPC\prefs\cvars.xml`
+## Added input methods
 
-- Weighted random effects, cooldowns, enable/disable controls, settings persistence, and a foreground safety check.
+- `MoveMouseRelative(int deltaX, int deltaY)`
+- `MoveMouseSmoothAsync(int totalDeltaX, int totalDeltaY, TimeSpan duration, CancellationToken cancellationToken)`
 
-## Build
+Directions:
 
-1. Install Visual Studio 2022 with the **.NET desktop development** workload.
-2. Open `CryoChaos.csproj`.
-3. Build for `x64` or `Any CPU`.
-4. Start Destiny 2 once so that `cvars.xml` exists.
-5. Run CryoChaos, inspect the **Detected keybinds** tab, then press **Start**.
+- Positive X: right
+- Negative X: left
+- Positive Y: down
+- Negative Y: up
 
-## Important limitations
+## Added effects
 
-Destiny's internal action names can differ between versions or control setups. The resolver first checks exact aliases, then fuzzy-matches action names. Review the detected-bindings tab before using keybind effects.
+- Look Left
+- Look Right
+- Look Up
+- Look Down
+- Camera Jolt
 
-This project does not inject into Destiny, read game memory, alter game files, evade anti-cheat, aim, fire, farm, or react to game state. It uses normal desktop overlays and Windows `SendInput` only.
-
-## Fixed-size in-game HUD
-
-The overlay now includes a fixed 720-DIP progress bar at the top center of the primary display and a fixed 330-DIP current-effect card below its right side. WPF device-independent pixels keep this HUD a consistent physical size across different game resolutions and Windows DPI settings.
-
-The progress bar drains toward zero until the next random effect. The current-effect card shows the newest active effect, its remaining time, and a count when multiple effects overlap.
-
-Blackout pulses now reach and hold 100% opacity. Tunnel Vision and Screen Intruder use fully opaque black areas.
-
-## Live screen-transform effects
-
-This build adds a separate full-screen live-view window powered by the native
-Windows Magnification API. It copies the visible Destiny 2 client area and can
-rotate or flip it while the normal CryoChaos HUD remains above it.
-
-Included effects:
-
-- Upside Down — 180-degree rotation
-- Sideways Left — 90-degree counterclockwise rotation
-- Sideways Right — 90-degree clockwise rotation
-- Mirror Mode — horizontal flip
-- Vertical Flip — top-to-bottom flip
-
-The project is forced to x64 because Microsoft does not support the
-Magnification API from a 32-bit process running under WOW64.
-
-For best results, run Destiny 2 in Borderless Windowed mode. Exclusive
-fullscreen applications may not be available to the desktop compositor and can
-produce a black live view. CryoChaos excludes its own top-level windows from the
-magnifier so the progress bar and app window are not recursively captured.
-
-The main files are:
-
-- `Models/ScreenTransformMode.cs`
-- `Services/MagnificationNative.cs`
-- `Services/DestinyWindowService.cs`
-- `Services/ScreenTransformService.cs`
-- `Views/MagnifierHost.cs`
-- `Views/ScreenTransformWindow.xaml`
-- `Views/ScreenTransformWindow.xaml.cs`
-- `Effects/ScreenTransformEffects.cs`
-
-No additional NuGet packages are required.
+Tune the movement amounts in `DirectionalLookEffectBase.GetMovement` and `CameraJoltEffect.GetMovement`.

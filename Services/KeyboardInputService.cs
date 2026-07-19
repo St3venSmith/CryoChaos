@@ -11,6 +11,7 @@ public sealed class KeyboardInputService
 
     private const uint KeyEventKeyUp = 0x0002;
 
+    private const uint MouseEventMove = 0x0001;
     private const uint MouseEventLeftDown = 0x0002;
     private const uint MouseEventLeftUp = 0x0004;
     private const uint MouseEventRightDown = 0x0008;
@@ -20,11 +21,15 @@ public sealed class KeyboardInputService
     private const uint MouseEventXDown = 0x0080;
     private const uint MouseEventXUp = 0x0100;
     private const uint MouseEventWheel = 0x0800;
+    private const uint MouseEventMoveNoCoalesce = 0x2000;
 
     private const uint XButton1 = 0x0001;
     private const uint XButton2 = 0x0002;
     private const int WheelDelta = 120;
 
+    /// <summary>
+    /// Presses a parsed Destiny keyboard, mouse-button, or wheel binding.
+    /// </summary>
     public async Task PressAsync(
         InputBinding binding,
         TimeSpan holdDuration,
@@ -128,7 +133,103 @@ public sealed class KeyboardInputService
         });
     }
 
-    private static void SendKeyboard(ushort virtualKey, bool keyUp)
+    /// <summary>
+    /// Moves the mouse by a relative amount immediately.
+    /// Positive X moves right, negative X moves left.
+    /// Positive Y moves down, negative Y moves up.
+    /// </summary>
+    public void MoveMouseRelative(int deltaX, int deltaY)
+    {
+        if (deltaX == 0 && deltaY == 0)
+        {
+            return;
+        }
+
+        SendMouseMovement(deltaX, deltaY);
+    }
+
+    /// <summary>
+    /// Smoothly distributes relative mouse movement over a duration.
+    /// This is useful for camera turns instead of a single sharp jump.
+    /// </summary>
+    public async Task MoveMouseSmoothAsync(
+        int totalDeltaX,
+        int totalDeltaY,
+        TimeSpan duration,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (totalDeltaX == 0 && totalDeltaY == 0)
+        {
+            return;
+        }
+
+        if (duration <= TimeSpan.Zero)
+        {
+            MoveMouseRelative(totalDeltaX, totalDeltaY);
+            return;
+        }
+
+        const double targetStepMilliseconds = 8.0;
+
+        int stepCount = Math.Max(
+            1,
+            (int)Math.Ceiling(
+                duration.TotalMilliseconds /
+                targetStepMilliseconds));
+
+        TimeSpan stepDelay = TimeSpan.FromTicks(
+            Math.Max(
+                1,
+                duration.Ticks / stepCount));
+
+        int sentX = 0;
+        int sentY = 0;
+
+        for (int step = 1; step <= stepCount; step++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            int targetX = (int)Math.Round(
+                totalDeltaX *
+                (step / (double)stepCount));
+
+            int targetY = (int)Math.Round(
+                totalDeltaY *
+                (step / (double)stepCount));
+
+            int stepX = targetX - sentX;
+            int stepY = targetY - sentY;
+
+            if (stepX != 0 || stepY != 0)
+            {
+                SendMouseMovement(stepX, stepY);
+                sentX += stepX;
+                sentY += stepY;
+            }
+
+            if (step < stepCount)
+            {
+                await Task.Delay(
+                    stepDelay,
+                    cancellationToken);
+            }
+        }
+
+        // Correct any rounding remainder so the requested total is exact.
+        int remainingX = totalDeltaX - sentX;
+        int remainingY = totalDeltaY - sentY;
+
+        if (remainingX != 0 || remainingY != 0)
+        {
+            SendMouseMovement(remainingX, remainingY);
+        }
+    }
+
+    private static void SendKeyboard(
+        ushort virtualKey,
+        bool keyUp)
     {
         SendSingle(new Input
         {
@@ -203,6 +304,27 @@ public sealed class KeyboardInputService
         });
     }
 
+    private static void SendMouseMovement(
+        int deltaX,
+        int deltaY)
+    {
+        SendSingle(new Input
+        {
+            Type = InputMouse,
+            Data = new InputUnion
+            {
+                Mouse = new MouseInput
+                {
+                    Dx = deltaX,
+                    Dy = deltaY,
+                    Flags =
+                        MouseEventMove |
+                        MouseEventMoveNoCoalesce
+                }
+            }
+        });
+    }
+
     private static void SendSingle(Input input)
     {
         uint sent = SendInput(
@@ -213,6 +335,7 @@ public sealed class KeyboardInputService
         if (sent != 1)
         {
             int error = Marshal.GetLastWin32Error();
+
             throw new Win32Exception(
                 error,
                 $"SendInput failed with Windows error {error}.");
