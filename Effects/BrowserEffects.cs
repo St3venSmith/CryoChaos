@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
 using CryoChaos.Models;
@@ -7,7 +8,8 @@ using CryoChaos.Services;
 namespace CryoChaos.Effects;
 
 /// <summary>
-/// Base for effects that open one random YouTube URL in the default browser.
+/// Base for effects that open one random YouTube URL in a dedicated browser
+/// app-mode mini-player.
 /// Derive from this class and replace VideoUrls to make themed playlists.
 /// </summary>
 public abstract class RandomYouTubeEffectBase : IChaosEffect
@@ -31,20 +33,13 @@ public abstract class RandomYouTubeEffectBase : IChaosEffect
                 "The YouTube effect needs at least one valid youtube.com or youtu.be HTTPS URL.");
         }
 
-        string selected = validUrls[context.Random.Next(validUrls.Length)];
-        IntPtr result = ShellExecute(
-            IntPtr.Zero,
-            "open",
-            selected,
-            null,
-            null,
-            4); // SW_SHOWNOACTIVATE
-        if (result.ToInt64() <= 32)
-        {
-            throw new Win32Exception(
-                unchecked((int)result.ToInt64()),
-                "Windows could not open the selected YouTube URL.");
-        }
+        string selected = AddAutoplay(validUrls[context.Random.Next(validUrls.Length)]);
+        string browserPath = FindAppModeBrowser() ??
+            throw new InvalidOperationException(
+                "The YouTube mini-player requires Microsoft Edge or Google Chrome.");
+
+        HashSet<IntPtr> windowsBeforeLaunch = GetBrowserWindows();
+        using Process browserProcess = StartAppModeBrowser(browserPath, selected);
 
         // Keep Destiny active while the new tab loads. A YouTube window title
         // is the best external signal available without browser automation.
@@ -53,7 +48,10 @@ public abstract class RandomYouTubeEffectBase : IChaosEffect
         {
             await Task.Delay(250, cancellationToken);
             ForegroundWindowService.TryActivateDestinyWindow();
-            browserWindow = FindBrowserWindow(requireYouTubeTitle: true);
+            browserWindow = FindNewBrowserWindow(
+                windowsBeforeLaunch,
+                browserProcess.HasExited ? null : (uint)browserProcess.Id,
+                requireYouTubeTitle: true);
             if (browserWindow != IntPtr.Zero && index >= 3)
             {
                 break;
@@ -65,7 +63,10 @@ public abstract class RandomYouTubeEffectBase : IChaosEffect
         // briefly, then return focus to Destiny.
         browserWindow = browserWindow != IntPtr.Zero
             ? browserWindow
-            : FindBrowserWindow(requireYouTubeTitle: false);
+            : FindNewBrowserWindow(
+                windowsBeforeLaunch,
+                browserProcess.HasExited ? null : (uint)browserProcess.Id,
+                requireYouTubeTitle: false);
         if (browserWindow != IntPtr.Zero)
         {
             GameMonitorPlacementService.PlaceMiniPlayer(browserWindow);
@@ -78,6 +79,57 @@ public abstract class RandomYouTubeEffectBase : IChaosEffect
             await Task.Delay(delay, cancellationToken);
             ForegroundWindowService.TryActivateDestinyWindow();
         }
+    }
+
+    private static Process StartAppModeBrowser(string browserPath, string url)
+    {
+        ProcessStartInfo startInfo = new(browserPath)
+        {
+            UseShellExecute = false
+        };
+        startInfo.ArgumentList.Add($"--app={url}");
+        startInfo.ArgumentList.Add("--new-window");
+        startInfo.ArgumentList.Add("--no-first-run");
+        startInfo.ArgumentList.Add("--autoplay-policy=no-user-gesture-required");
+
+        return Process.Start(startInfo) ??
+            throw new Win32Exception("The YouTube mini-player browser did not start.");
+    }
+
+    private static string? FindAppModeBrowser()
+    {
+        string programFiles = Environment.GetFolderPath(
+            Environment.SpecialFolder.ProgramFiles);
+        string programFilesX86 = Environment.GetFolderPath(
+            Environment.SpecialFolder.ProgramFilesX86);
+        string localAppData = Environment.GetFolderPath(
+            Environment.SpecialFolder.LocalApplicationData);
+
+        string[] candidates =
+        [
+            Path.Combine(programFilesX86, "Microsoft", "Edge", "Application", "msedge.exe"),
+            Path.Combine(programFiles, "Microsoft", "Edge", "Application", "msedge.exe"),
+            Path.Combine(programFiles, "Google", "Chrome", "Application", "chrome.exe"),
+            Path.Combine(programFilesX86, "Google", "Chrome", "Application", "chrome.exe"),
+            Path.Combine(localAppData, "Google", "Chrome", "Application", "chrome.exe")
+        ];
+
+        return candidates.FirstOrDefault(File.Exists);
+    }
+
+    private static string AddAutoplay(string value)
+    {
+        UriBuilder builder = new(value);
+        string query = builder.Query.TrimStart('?');
+        if (!query.Split('&', StringSplitOptions.RemoveEmptyEntries)
+                .Any(item => item.StartsWith("autoplay=", StringComparison.OrdinalIgnoreCase)))
+        {
+            builder.Query = string.IsNullOrWhiteSpace(query)
+                ? "autoplay=1"
+                : $"{query}&autoplay=1";
+        }
+
+        return builder.Uri.AbsoluteUri;
     }
 
     private static bool IsYouTubeUrl(string value)
@@ -94,33 +146,52 @@ public abstract class RandomYouTubeEffectBase : IChaosEffect
                host.Equals("youtu.be", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static IntPtr FindBrowserWindow(bool requireYouTubeTitle)
+    private static HashSet<IntPtr> GetBrowserWindows()
+    {
+        HashSet<IntPtr> windows = [];
+        EnumWindows((window, _) =>
+        {
+            if (IsWindowVisible(window) && IsBrowserWindow(window))
+            {
+                windows.Add(window);
+            }
+
+            return true;
+        }, IntPtr.Zero);
+        return windows;
+    }
+
+    private static IntPtr FindNewBrowserWindow(
+        IReadOnlySet<IntPtr> windowsBeforeLaunch,
+        uint? preferredProcessId,
+        bool requireYouTubeTitle)
     {
         IntPtr youtubeWindow = IntPtr.Zero;
-        IntPtr browserFallback = IntPtr.Zero;
+        IntPtr processWindow = IntPtr.Zero;
+        IntPtr newWindow = IntPtr.Zero;
 
         EnumWindows((window, _) =>
         {
-            if (!IsWindowVisible(window))
+            if (!IsWindowVisible(window) ||
+                !IsBrowserWindow(window) ||
+                windowsBeforeLaunch.Contains(window))
             {
                 return true;
             }
 
             string title = GetWindowText(window);
-            string className = GetWindowClass(window);
-            bool browserClass =
-                className.Equals("Chrome_WidgetWin_1", StringComparison.OrdinalIgnoreCase) ||
-                className.Equals("MozillaWindowClass", StringComparison.OrdinalIgnoreCase) ||
-                className.Equals("ApplicationFrameWindow", StringComparison.OrdinalIgnoreCase) ||
-                className.Contains("Opera", StringComparison.OrdinalIgnoreCase);
-
-            if (browserClass && browserFallback == IntPtr.Zero)
+            _ = GetWindowThreadProcessId(window, out uint processId);
+            if (newWindow == IntPtr.Zero)
             {
-                browserFallback = window;
+                newWindow = window;
             }
 
-            if (browserClass &&
-                title.Contains("YouTube", StringComparison.OrdinalIgnoreCase))
+            if (preferredProcessId == processId && processWindow == IntPtr.Zero)
+            {
+                processWindow = window;
+            }
+
+            if (title.Contains("YouTube", StringComparison.OrdinalIgnoreCase))
             {
                 youtubeWindow = window;
                 return false;
@@ -131,7 +202,16 @@ public abstract class RandomYouTubeEffectBase : IChaosEffect
 
         return youtubeWindow != IntPtr.Zero
             ? youtubeWindow
-            : requireYouTubeTitle ? IntPtr.Zero : browserFallback;
+            : requireYouTubeTitle
+                ? IntPtr.Zero
+                : processWindow != IntPtr.Zero ? processWindow : newWindow;
+    }
+
+    private static bool IsBrowserWindow(IntPtr window)
+    {
+        string className = GetWindowClass(window);
+        return className.Equals("Chrome_WidgetWin_1", StringComparison.OrdinalIgnoreCase) ||
+               className.Equals("ApplicationFrameWindow", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool TryForceForegroundWindow(IntPtr window)
@@ -174,15 +254,6 @@ public abstract class RandomYouTubeEffectBase : IChaosEffect
         _ = GetClassName(window, text, text.Capacity);
         return text.ToString();
     }
-
-    [DllImport("shell32.dll", EntryPoint = "ShellExecuteW", CharSet = CharSet.Unicode)]
-    private static extern IntPtr ShellExecute(
-        IntPtr hwnd,
-        string operation,
-        string file,
-        string? parameters,
-        string? directory,
-        int showCommand);
 
     private delegate bool EnumWindowsProcedure(IntPtr window, IntPtr parameter);
 
@@ -235,7 +306,7 @@ public sealed class RandomYouTubeVideoEffect : RandomYouTubeEffectBase
     {
         Id = "random_youtube_video",
         Name = "Unexpected YouTube",
-        Description = "Opens one random video from the configured playlist in the default browser.",
+        Description = "Opens one random video in a dedicated mini-player over the game.",
         Type = ChaosEffectType.Keybind,
         MinimumLevel = ChaosLevel.Chaos,
         Weight = 5,
@@ -269,7 +340,7 @@ public sealed class YourRandomYouTubeEffect : RandomYouTubeEffectBase
     {
         Id = "your_random_youtube",
         Name = "Your YouTube Playlist",
-        Description = "Template random YouTube browser effect.",
+        Description = "Template random YouTube mini-player effect.",
         Type = ChaosEffectType.Keybind,
         MinimumLevel = ChaosLevel.Normal,
         Weight = 5,
