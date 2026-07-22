@@ -35,9 +35,9 @@ public abstract class RandomYouTubeEffectBase : IChaosEffect
         }
 
         string selected = AddAutoplay(validUrls[context.Random.Next(validUrls.Length)]);
-        string browserPath = FindAppModeBrowser() ??
+        string browserPath = FindBraveBrowser() ??
             throw new InvalidOperationException(
-                "The YouTube mini-player requires Microsoft Edge or Google Chrome.");
+                "The YouTube mini-player requires Brave Browser. Install Brave, then run the effect again.");
 
         HashSet<IntPtr> windowsBeforeLaunch = GetBrowserWindows();
         using Process browserProcess = StartAppModeBrowser(browserPath, selected);
@@ -121,7 +121,7 @@ public abstract class RandomYouTubeEffectBase : IChaosEffect
             throw new Win32Exception("The YouTube mini-player browser did not start.");
     }
 
-    private static string? FindAppModeBrowser()
+    private static string? FindBraveBrowser()
     {
         string programFiles = Environment.GetFolderPath(
             Environment.SpecialFolder.ProgramFiles);
@@ -132,11 +132,9 @@ public abstract class RandomYouTubeEffectBase : IChaosEffect
 
         string[] candidates =
         [
-            Path.Combine(programFilesX86, "Microsoft", "Edge", "Application", "msedge.exe"),
-            Path.Combine(programFiles, "Microsoft", "Edge", "Application", "msedge.exe"),
-            Path.Combine(programFiles, "Google", "Chrome", "Application", "chrome.exe"),
-            Path.Combine(programFilesX86, "Google", "Chrome", "Application", "chrome.exe"),
-            Path.Combine(localAppData, "Google", "Chrome", "Application", "chrome.exe")
+            Path.Combine(programFiles, "BraveSoftware", "Brave-Browser", "Application", "brave.exe"),
+            Path.Combine(programFilesX86, "BraveSoftware", "Brave-Browser", "Application", "brave.exe"),
+            Path.Combine(localAppData, "BraveSoftware", "Brave-Browser", "Application", "brave.exe")
         ];
 
         return candidates.FirstOrDefault(File.Exists);
@@ -331,7 +329,7 @@ public sealed class RandomYouTubeVideoEffect : RandomYouTubeEffectBase
     {
         Id = "random_youtube_video",
         Name = "Unexpected YouTube",
-        Description = "Opens one random video in a dedicated mini-player over the game.",
+        Description = "Opens one random video in a click-through Brave mini-player over the game.",
         Type = ChaosEffectType.Keybind,
         MinimumLevel = ChaosLevel.Chaos,
         Weight = 5,
