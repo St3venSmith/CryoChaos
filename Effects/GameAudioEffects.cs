@@ -35,13 +35,6 @@ public sealed class ReverseAudioEffect : GameAudioChaosEffectBase
     protected override GameAudioEffectMode Mode => GameAudioEffectMode.Reverse;
 }
 
-public sealed class RadioAudioEffect : GameAudioChaosEffectBase
-{
-    public override ChaosEffectDefinition Definition { get; } = AudioEffectDefinitions.Create(
-        "audio_radio", "Bad Radio", "Crushes the game audio through a narrow, noisy radio filter.", 13, 60);
-    protected override GameAudioEffectMode Mode => GameAudioEffectMode.Radio;
-}
-
 public sealed class UnderwaterAudioEffect : GameAudioChaosEffectBase
 {
     public override ChaosEffectDefinition Definition { get; } = AudioEffectDefinitions.Create(
@@ -68,13 +61,6 @@ public sealed class ReverbAudioEffect : GameAudioChaosEffectBase
     public override ChaosEffectDefinition Definition { get; } = AudioEffectDefinitions.Create(
         "audio_reverb", "Infinite Hall", "Adds a dense artificial reverb to Destiny's audio.", 14, 65);
     protected override GameAudioEffectMode Mode => GameAudioEffectMode.Reverb;
-}
-
-public sealed class StaticAudioEffect : GameAudioChaosEffectBase
-{
-    public override ChaosEffectDefinition Definition { get; } = AudioEffectDefinitions.Create(
-        "audio_static", "Dead Air", "Mixes random static bursts into Destiny's audio.", 12, 55);
-    protected override GameAudioEffectMode Mode => GameAudioEffectMode.RandomStatic;
 }
 
 internal static class AudioEffectDefinitions
