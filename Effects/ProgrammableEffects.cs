@@ -234,7 +234,7 @@ public abstract class MathChallengeEffectBase : IChaosEffect
 
         bool hard = context.Random.Next(Math.Max(1, HardQuestionChance)) == 0;
         (string question, int answer) = CreateQuestion(context.Random, hard);
-        TimeSpan timeLimit = context.ScaleDuration(
+        TimeSpan timeLimit = context.ScaleEffectDuration(
             hard ? HardTimeLimit : EasyTimeLimit);
         bool success = await QteChaosEffectBase.RunWhileMovementLockedAsync(
             context,
@@ -297,7 +297,7 @@ public abstract class JumpScareChaosEffectBase : IChaosEffect
 
     public async Task RunAsync(ChaosEffectContext context, CancellationToken cancellationToken)
     {
-        TimeSpan duration = context.ScaleDuration(ScareDuration);
+        TimeSpan duration = context.ScaleEffectDuration(ScareDuration);
         Task sound = context.SoundEffects.PlayAsync(
             Sound, SoundSource, 1, TimeSpan.Zero, true,
             duration, cancellationToken);
