@@ -252,7 +252,7 @@ public abstract class InputSwapChaosEffectBase : IChaosEffect
         await context.InputRemapper.SwapAsync(
             first,
             second,
-            context.ScaleDuration(SwapDuration(context.SelectedLevel)),
+            context.ScaleEffectDuration(SwapDuration(context.SelectedLevel)),
             cancellationToken);
     }
 }
@@ -326,7 +326,7 @@ public abstract class InputDisableChaosEffectBase : IChaosEffect
 
         await context.InputRemapper.SuppressAsync(
             bindings,
-            context.ScaleDuration(DisableDuration(context.SelectedLevel)),
+            context.ScaleEffectDuration(DisableDuration(context.SelectedLevel)),
             cancellationToken);
     }
 }
