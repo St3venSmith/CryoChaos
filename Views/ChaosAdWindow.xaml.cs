@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Threading;
+using CryoChaos.Services;
 
 namespace CryoChaos.Views;
 
@@ -35,10 +36,9 @@ public partial class ChaosAdWindow : Window
 
         await Application.Current.Dispatcher.InvokeAsync(() =>
         {
-            window = new ChaosAdWindow(skipDelay)
-            {
-                Owner = Application.Current.MainWindow
-            };
+            window = new ChaosAdWindow(skipDelay);
+            window.SourceInitialized += (_, _) =>
+                GameMonitorPlacementService.CenterOnGameMonitor(window, activate: true);
 
             window.Begin(cancellationToken);
             window.Show();
