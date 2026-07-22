@@ -48,6 +48,7 @@ public sealed class KeyboardRemapService : IDisposable
     private IntPtr _mouseHook;
     private readonly Dictionary<Guid, IReadOnlyDictionary<ushort, ushort>>
         _keyboardRemapSessions = [];
+    private readonly Dictionary<Guid, TimeSpan> _keyboardDelaySessions = [];
     private readonly Dictionary<Guid, IReadOnlyDictionary<MouseInputButton, MouseInputButton>>
         _mouseRemapSessions = [];
     private readonly Dictionary<Guid, IReadOnlyList<InputBinding>>
@@ -113,6 +114,23 @@ public sealed class KeyboardRemapService : IDisposable
 
         await RunTimedHookAsync(
             () => StartKeyboardRemap(usable),
+            duration,
+            cancellationToken);
+    }
+
+    public async Task DelayKeyboardAsync(
+        TimeSpan inputDelay,
+        TimeSpan duration,
+        CancellationToken cancellationToken)
+    {
+        ThrowIfDisposed();
+        inputDelay = TimeSpan.FromMilliseconds(Math.Clamp(
+            inputDelay.TotalMilliseconds,
+            25,
+            1000));
+
+        await RunTimedHookAsync(
+            () => StartKeyboardDelay(inputDelay),
             duration,
             cancellationToken);
     }
@@ -267,6 +285,15 @@ public sealed class KeyboardRemapService : IDisposable
         return sessionId;
     }
 
+    private Guid StartKeyboardDelay(TimeSpan delay)
+    {
+        CacheDestinyWindow();
+        Guid sessionId = Guid.NewGuid();
+        EnsureKeyboardHook();
+        _keyboardDelaySessions.Add(sessionId, delay);
+        return sessionId;
+    }
+
     private Guid StartMouseRemap(
         IReadOnlyDictionary<MouseInputButton, MouseInputButton> mapping)
     {
@@ -414,7 +441,7 @@ public sealed class KeyboardRemapService : IDisposable
                         return new IntPtr(1);
                     }
 
-                    if (!ownSynthetic && _keyboardRemapSessions.Count > 0)
+                    if (!ownSynthetic)
                     {
                         ushort targetKey = sourceKey;
 
@@ -425,6 +452,13 @@ public sealed class KeyboardRemapService : IDisposable
                             {
                                 targetKey = next;
                             }
+                        }
+
+                        if (_keyboardDelaySessions.Count > 0)
+                        {
+                            TimeSpan delay = _keyboardDelaySessions.Values.Max();
+                            _ = ReplayKeyboardStateAsync(targetKey, pressed, delay);
+                            return new IntPtr(1);
                         }
 
                         if (targetKey != sourceKey)
@@ -443,6 +477,22 @@ public sealed class KeyboardRemapService : IDisposable
         }
 
         return CallNextHookEx(_keyboardHook, code, wParam, lParam);
+    }
+
+    private static async Task ReplayKeyboardStateAsync(
+        ushort virtualKey,
+        bool pressed,
+        TimeSpan delay)
+    {
+        try
+        {
+            await Task.Delay(delay).ConfigureAwait(false);
+            KeyboardInputService.SendKeyboardState(virtualKey, pressed);
+        }
+        catch (Exception exception)
+        {
+            CrashLogService.WriteException("DELAYED KEYBOARD INPUT", exception);
+        }
     }
 
     private IntPtr MouseHookProcedure(
@@ -772,6 +822,8 @@ public sealed class KeyboardRemapService : IDisposable
             }
         }
 
+        _keyboardDelaySessions.Remove(sessionId);
+
         if (_mouseRemapSessions.Remove(
                 sessionId,
                 out IReadOnlyDictionary<MouseInputButton, MouseInputButton>? mouseMapping))
@@ -799,6 +851,7 @@ public sealed class KeyboardRemapService : IDisposable
 
         if (_keyboardHook != IntPtr.Zero &&
             _keyboardRemapSessions.Count == 0 &&
+            _keyboardDelaySessions.Count == 0 &&
             !_suppressionSessions.Values
                 .SelectMany(bindings => bindings)
                 .Any(binding => binding.Kind == InputBindingKind.Keyboard))
@@ -881,6 +934,7 @@ public sealed class KeyboardRemapService : IDisposable
             _suppressionSessions.Values.SelectMany(bindings => bindings));
 
         _keyboardRemapSessions.Clear();
+        _keyboardDelaySessions.Clear();
         _mouseRemapSessions.Clear();
         _suppressionSessions.Clear();
         _lookSuppressionSessions.Clear();
