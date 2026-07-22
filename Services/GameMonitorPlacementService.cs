@@ -15,8 +15,10 @@ internal static class GameMonitorPlacementService
     private const uint SwpFrameChanged = 0x0020;
     private const int GwlExStyle = -20;
     private const int WsExTransparent = 0x00000020;
+    private const int WsExLayered = 0x00080000;
     private const int WsExToolWindow = 0x00000080;
     private const int WsExNoActivate = 0x08000000;
+    private const uint LwaAlpha = 0x00000002;
     private const uint WmClose = 0x0010;
 
     public static void CenterOnGameMonitor(Window window, bool activate)
@@ -66,7 +68,9 @@ internal static class GameMonitorPlacementService
         if (window == IntPtr.Zero) return;
         int style = GetWindowLong(window, GwlExStyle);
         _ = SetWindowLong(window, GwlExStyle,
-            style | WsExTransparent | WsExToolWindow | WsExNoActivate);
+            style | WsExTransparent | WsExLayered |
+            WsExToolWindow | WsExNoActivate);
+        _ = SetLayeredWindowAttributes(window, 0, 255, LwaAlpha);
         _ = SetWindowPos(window, IntPtr.Zero, 0, 0, 0, 0,
             SwpNoMove | SwpNoSize | SwpNoZOrder |
             SwpNoActivate | SwpFrameChanged);
@@ -90,6 +94,11 @@ internal static class GameMonitorPlacementService
 
     [DllImport("user32.dll", EntryPoint = "SetWindowLongW", SetLastError = true)]
     private static extern int SetWindowLong(IntPtr hwnd, int index, int value);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetLayeredWindowAttributes(
+        IntPtr hwnd, uint colorKey, byte alpha, uint flags);
 
     [DllImport("user32.dll", EntryPoint = "PostMessageW", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
