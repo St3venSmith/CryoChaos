@@ -403,15 +403,29 @@ internal sealed class ProcessLoopbackCapture : IDisposable
 
         public void ActivateCompleted(IActivateAudioInterfaceAsyncOperation operation)
         {
-            operation.GetActivateResult(out int result, out IntPtr pointer);
+            operation.GetActivateResult(out int result, out object activatedInterface);
             if (result < 0)
             {
-                if (pointer != IntPtr.Zero) Marshal.Release(pointer);
+                if (activatedInterface is not null &&
+                    Marshal.IsComObject(activatedInterface))
+                {
+                    Marshal.ReleaseComObject(activatedInterface);
+                }
+
                 _completion.TrySetException(Marshal.GetExceptionForHR(result)!);
                 return;
             }
 
-            if (!_completion.TrySetResult(pointer) && pointer != IntPtr.Zero)
+            // NAudio 2.2.1 exposes the activated interface as an object. Take
+            // our own IUnknown reference so the UI-thread continuation can
+            // create the typed IAudioClient RCW in the correct apartment.
+            IntPtr pointer = Marshal.GetIUnknownForObject(activatedInterface);
+            if (Marshal.IsComObject(activatedInterface))
+            {
+                Marshal.ReleaseComObject(activatedInterface);
+            }
+
+            if (!_completion.TrySetResult(pointer))
             {
                 Marshal.Release(pointer);
             }
