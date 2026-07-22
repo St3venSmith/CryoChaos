@@ -16,6 +16,9 @@ public sealed class ChaosEffectContext
     public required GameAudioEffectService GameAudioEffects { get; init; }
     public required VideoOverlayService VideoOverlay { get; init; }
     public required QteService Qte { get; init; }
+    public required ChaosMutatorService Mutators { get; init; }
+    public required string CurrentEffectId { get; init; }
+    public required double RuntimeDurationMultiplier { get; init; }
     public required Action<int> QueueRandomEffects { get; init; }
     public required Func<bool> TryTriggerRandomEffectNow { get; init; }
     public required IScreenTransformService ScreenTransform { get; init; }
@@ -35,8 +38,13 @@ public sealed class ChaosEffectContext
     public TimeSpan ScaleDuration(TimeSpan baseDuration) =>
         TimeSpan.FromMilliseconds(baseDuration.TotalMilliseconds * DurationMultiplier);
 
+    public TimeSpan ScaleEffectDuration(TimeSpan baseDuration) =>
+        TimeSpan.FromMilliseconds(
+            ScaleDuration(baseDuration).TotalMilliseconds *
+            RuntimeDurationMultiplier);
+
     public TimeSpan GetEffectDuration(ChaosEffectDefinition definition) =>
-        ScaleDuration(TimeSpan.FromSeconds(definition.DurationSeconds));
+        ScaleEffectDuration(TimeSpan.FromSeconds(definition.DurationSeconds));
 }
 
 public interface IChaosEffect
