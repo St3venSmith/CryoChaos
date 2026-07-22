@@ -11,14 +11,11 @@ internal sealed class AudioDspProcessor
     private readonly float[] _delay;
     private readonly float[] _reverbA;
     private readonly float[] _reverbB;
-    private readonly Random _random = new();
     private readonly List<float> _reverseBlock = [];
     private int _delayPosition;
     private int _reverbAPosition;
     private int _reverbBPosition;
     private float[] _lowPass;
-    private float[] _highPassInput;
-    private float[] _highPassOutput;
     private double _pitchPhase;
 
     public AudioDspProcessor(GameAudioEffectMode mode, WaveFormat format)
@@ -35,8 +32,6 @@ internal sealed class AudioDspProcessor
         _reverbA = new float[(int)(_sampleRate * 0.043) * _channels];
         _reverbB = new float[(int)(_sampleRate * 0.071) * _channels];
         _lowPass = new float[_channels];
-        _highPassInput = new float[_channels];
-        _highPassOutput = new float[_channels];
     }
 
     public byte[] Process(byte[] input)
@@ -51,12 +46,10 @@ internal sealed class AudioDspProcessor
         {
             GameAudioEffectMode.Echo => Echo(samples),
             GameAudioEffectMode.Reverse => Reverse(samples),
-            GameAudioEffectMode.Radio => Radio(samples),
             GameAudioEffectMode.Underwater => Underwater(samples),
             GameAudioEffectMode.PitchUp => Pitch(samples, 1.38),
             GameAudioEffectMode.PitchDown => Pitch(samples, 0.72),
             GameAudioEffectMode.Reverb => Reverb(samples),
-            GameAudioEffectMode.RandomStatic => Static(samples),
             _ => samples
         };
 
@@ -117,25 +110,6 @@ internal sealed class AudioDspProcessor
         return output;
     }
 
-    private float[] Radio(float[] input)
-    {
-        float[] output = new float[input.Length];
-        const float highAlpha = 0.93f;
-        float lowAlpha = LowPassAlpha(3400f);
-        for (int index = 0; index < input.Length; index++)
-        {
-            int channel = index % _channels;
-            float high = highAlpha *
-                (_highPassOutput[channel] + input[index] - _highPassInput[channel]);
-            _highPassInput[channel] = input[index];
-            _highPassOutput[channel] = high;
-            _lowPass[channel] += lowAlpha * (high - _lowPass[channel]);
-            output[index] = MathF.Tanh(_lowPass[channel] * 2.7f) * 0.62f +
-                ((float)_random.NextDouble() * 2f - 1f) * 0.018f;
-        }
-        return output;
-    }
-
     private float[] Underwater(float[] input)
     {
         float[] output = new float[input.Length];
@@ -184,19 +158,6 @@ internal sealed class AudioDspProcessor
             _reverbB[_reverbBPosition] = input[index] + b * 0.43f + a * 0.16f;
             _reverbAPosition = (_reverbAPosition + 1) % _reverbA.Length;
             _reverbBPosition = (_reverbBPosition + 1) % _reverbB.Length;
-        }
-        return output;
-    }
-
-    private float[] Static(float[] input)
-    {
-        float[] output = new float[input.Length];
-        bool burst = _random.NextDouble() < 0.1;
-        for (int index = 0; index < input.Length; index++)
-        {
-            float noise = ((float)_random.NextDouble() * 2f - 1f) *
-                (burst ? 0.28f : 0.055f);
-            output[index] = input[index] * (burst ? 0.46f : 0.78f) + noise;
         }
         return output;
     }
