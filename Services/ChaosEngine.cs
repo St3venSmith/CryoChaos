@@ -12,6 +12,7 @@ public sealed class ChaosEngine : IDisposable
     public const int MaximumSupportedActiveEffects = 50;
     private const int StandardEffectWeight = 10;
     private const int ScreenTransformWeight = 1;
+    private const int RareMutatorWeight = 1;
     private int _maximumActiveEffects = 3;
 
     private readonly IReadOnlyList<IChaosEffect> _effects;
@@ -70,10 +71,12 @@ public sealed class ChaosEngine : IDisposable
         // other effect families.
         foreach (IChaosEffect effect in _effects)
         {
-            effect.Definition.Weight =
-                effect.Definition.Type == ChaosEffectType.ScreenTransform
-                    ? ScreenTransformWeight
-                    : StandardEffectWeight;
+            effect.Definition.Weight = effect.Definition.Id is
+                "mutator_purge_effects" or "mutator_protection"
+                    ? RareMutatorWeight
+                    : effect.Definition.Type == ChaosEffectType.ScreenTransform
+                        ? ScreenTransformWeight
+                        : StandardEffectWeight;
         }
 
         Effects = new ObservableCollection<ChaosEffectDefinition>(
@@ -355,15 +358,6 @@ public sealed class ChaosEngine : IDisposable
                 return null;
             }
 
-            bool anyActiveOrdinaryEffect =
-                _activeEffects.Values.Any(active =>
-                    active.Effect.Definition.Type != ChaosEffectType.Mutator);
-
-            bool nonStackableEffectIsActive =
-                _activeEffects.Values.Any(active =>
-                    active.Effect.Definition.Type != ChaosEffectType.Mutator &&
-                    !active.Effect.Definition.CanStack);
-
             eligible = _effects
                 .Where(effect =>
                     effect.Definition.Enabled &&
@@ -377,10 +371,9 @@ public sealed class ChaosEngine : IDisposable
                     !_activeEffects.ContainsKey(
                         effect.Definition.Id) &&
                     (effect.Definition.Type == ChaosEffectType.Mutator ||
-                     (!_mutators.IsProtected &&
-                      !nonStackableEffectIsActive &&
-                      (effect.Definition.CanStack ||
-                       !anyActiveOrdinaryEffect))))
+                     (!_mutators.IsProtected && CanStartOrdinaryEffect(
+                         effect,
+                         _activeEffects.Values))))
                 .ToList();
         }
 
@@ -430,23 +423,14 @@ public sealed class ChaosEngine : IDisposable
         {
             // A non-stackable effect may have started after this effect was
             // selected. Recheck before starting it.
-            bool anyActiveEffect =
-                _activeEffects.Values.Any(active =>
-                    active.Effect.Definition.Type != ChaosEffectType.Mutator);
-
-            bool nonStackableEffectIsActive =
-                _activeEffects.Values.Any(active =>
-                    active.Effect.Definition.Type != ChaosEffectType.Mutator &&
-                    !active.Effect.Definition.CanStack);
-
             bool isMutator =
                 effect.Definition.Type == ChaosEffectType.Mutator;
 
             if (_activeEffects.Count >= _maximumActiveEffects ||
                 (!isMutator && _mutators.IsProtected) ||
-                (!isMutator && nonStackableEffectIsActive) ||
-                (!isMutator && !effect.Definition.CanStack &&
-                 anyActiveEffect))
+                (!isMutator && !CanStartOrdinaryEffect(
+                    effect,
+                    _activeEffects.Values)))
             {
                 effectCancellation.Dispose();
                 return;
@@ -611,6 +595,32 @@ public sealed class ChaosEngine : IDisposable
                     cancellationToken);
             }
         }
+    }
+
+    private static bool CanStartOrdinaryEffect(
+        IChaosEffect candidate,
+        IEnumerable<ActiveEffect> activeEffects)
+    {
+        ActiveEffect[] active = activeEffects.ToArray();
+        bool candidateIsMouse = candidate is RawMouseChaosEffectBase;
+
+        // Raw-mouse modifiers share one interception pipeline. Only one mouse
+        // modifier may run at a time, but it must not prevent an unrelated
+        // keyboard, audio, graphic, or screen effect from running beside it.
+        if (candidateIsMouse)
+        {
+            return active.All(item =>
+                item.Effect is not RawMouseChaosEffectBase);
+        }
+
+        ActiveEffect[] relevant = active
+            .Where(item =>
+                item.Effect.Definition.Type != ChaosEffectType.Mutator &&
+                item.Effect is not RawMouseChaosEffectBase)
+            .ToArray();
+
+        return relevant.All(item => item.Effect.Definition.CanStack) &&
+               (candidate.Definition.CanStack || relevant.Length == 0);
     }
 
     public void Dispose()
