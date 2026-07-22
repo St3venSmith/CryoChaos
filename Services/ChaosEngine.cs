@@ -10,9 +10,9 @@ namespace CryoChaos.Services;
 public sealed class ChaosEngine : IDisposable
 {
     public const int MaximumSupportedActiveEffects = 50;
-    private const int StandardEffectWeight = 10;
-    private const int ScreenTransformWeight = 1;
-    private const int RareMutatorWeight = 1;
+    private const int StandardEffectWeight = 100;
+    private const int ScreenTransformWeight = 10;
+    private const int RareMutatorWeight = 3;
     private int _maximumActiveEffects = 3;
 
     private readonly IReadOnlyList<IChaosEffect> _effects;
