@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
 using CryoChaos.Models;
@@ -180,7 +181,7 @@ public abstract class RandomYouTubeEffectBase : IChaosEffect
             }
 
             string title = GetWindowText(window);
-            _ = GetWindowThreadProcessId(window, out uint processId);
+            GetWindowThreadProcessId(window, out uint processId);
             if (newWindow == IntPtr.Zero)
             {
                 newWindow = window;
