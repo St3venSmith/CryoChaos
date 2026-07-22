@@ -4,14 +4,22 @@
 
 CryoChaos can capture only the `destiny2.exe` process tree through Windows
 WASAPI process loopback and layer a processed wet signal over a quieter dry
-signal. Included effects are Echo, Reverse, Radio, Underwater, Pitch Up, Pitch
-Down, Reverb, and Random Static. This requires Windows 10 build 20348 or later.
+signal. Included effects are Echo, Reverse, Underwater, Pitch Up, Pitch Down,
+and Reverb. This requires Windows 10 build 20348 or later.
 
 The game is not injected or hooked. While an audio effect is active, CryoChaos
 temporarily lowers Destiny's Windows mixer session to 22 percent, renders the
 effected stream through the default output device, and restores the user's exact
 previous mixer volume when the effect stops or fails. Keep Destiny and
 CryoChaos on the same default Windows output device.
+
+## Raw mouse physics
+
+The external Raw Input correction service also supports Momentum, Elastic,
+Gravity, Magnet, Orbit, a 20-count Deadzone, Wind, and accelerating Friction.
+The effects use the same bounded 8 ms output pump and injection marker as the
+camera lock and sensitivity effects. Press `Ctrl+Alt+F12` to stop a raw-mouse
+effect immediately.
 
 CryoChaos is an external Destiny 2 chaos controller. It applies timed visual and input effects without injecting code into the game process.
 
