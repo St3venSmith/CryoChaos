@@ -21,6 +21,16 @@ The effects use the same bounded 8 ms output pump and injection marker as the
 camera lock and sensitivity effects. Press `Ctrl+Alt+F12` to stop a raw-mouse
 effect immediately.
 
+## Mutator effects
+
+Mutators alter the chaos scheduler itself. Double Time and Triple Time extend
+effects that begin while the mutator is active (combined duration is safely
+capped at 6x). Two for One starts one additional stackable effect whenever a
+new ordinary effect begins. Clean Slate cancels every other active effect, and
+Chaos Shield clears active effects before temporarily blocking new ordinary
+effects. Purge and protection cancel the underlying work as well as removing
+the HUD entry.
+
 CryoChaos is an external Destiny 2 chaos controller. It applies timed visual and input effects without injecting code into the game process.
 
 ## GPU screen effects
