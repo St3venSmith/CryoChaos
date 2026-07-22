@@ -14,7 +14,15 @@ public enum RawMouseEffectMode
     InvertHorizontal,
     InvertVertical,
     InvertBoth,
-    Scale
+    Scale,
+    Momentum,
+    Elastic,
+    Gravity,
+    Magnet,
+    Orbit,
+    Deadzone,
+    Wind,
+    Friction
 }
 
 /// <summary>
@@ -79,6 +87,15 @@ public sealed class RawMouseEffectService : IDisposable
     private int _injectionsInWindow;
     private double _correctionDebtX;
     private double _correctionDebtY;
+    private double _physicsVelocityX;
+    private double _physicsVelocityY;
+    private double _virtualPositionX;
+    private double _virtualPositionY;
+    private double _windX;
+    private double _windY;
+    private int _physicsTick;
+    private int _deadzoneIdleTicks;
+    private readonly Random _physicsRandom = new();
 
     private RawMouseEffectMode _mode;
     private double _multiplier = 1.0;
@@ -112,11 +129,11 @@ public sealed class RawMouseEffectService : IDisposable
                 "Mouse correction output must be between 1 and 500.");
         }
 
-        if (duration <= TimeSpan.Zero || duration > TimeSpan.FromSeconds(30))
+        if (duration <= TimeSpan.Zero || duration > TimeSpan.FromSeconds(60))
         {
             throw new ArgumentOutOfRangeException(
                 nameof(duration),
-                "Raw mouse effects must last between 1 and 30 seconds.");
+                "Raw mouse effects must last between 1 and 60 seconds.");
         }
 
         await _effectGate.WaitAsync(cancellationToken);
@@ -390,24 +407,21 @@ public sealed class RawMouseEffectService : IDisposable
                 baseOutputLimit = _baseOutputLimit;
             }
 
-            if (physicalX != 0 || physicalY != 0)
+            (double desiredX, double desiredY) =
+                CalculateDesiredMovement(
+                    mode,
+                    multiplier,
+                    physicalX,
+                    physicalY);
+
+            _correctionDebtX += desiredX - physicalX;
+            _correctionDebtY += desiredY - physicalY;
+
+            if (Math.Abs(_correctionDebtX) > MaximumCorrectionDebt ||
+                Math.Abs(_correctionDebtY) > MaximumCorrectionDebt)
             {
-                (double desiredX, double desiredY) =
-                    CalculateDesiredMovement(
-                        mode,
-                        multiplier,
-                        physicalX,
-                        physicalY);
-
-                _correctionDebtX += desiredX - physicalX;
-                _correctionDebtY += desiredY - physicalY;
-
-                if (Math.Abs(_correctionDebtX) > MaximumCorrectionDebt ||
-                    Math.Abs(_correctionDebtY) > MaximumCorrectionDebt)
-                {
-                    StopWithFault("Mouse correction backlog exceeded the safety limit.");
-                    return;
-                }
+                StopWithFault("Mouse correction backlog exceeded the safety limit.");
+                return;
             }
 
             if (Math.Abs(_correctionDebtX) < 0.5 &&
@@ -478,12 +492,14 @@ public sealed class RawMouseEffectService : IDisposable
         }
     }
 
-    private static (double X, double Y) CalculateDesiredMovement(
+    private (double X, double Y) CalculateDesiredMovement(
         RawMouseEffectMode mode,
         double multiplier,
         int physicalX,
-        int physicalY) =>
-        mode switch
+        int physicalY)
+    {
+        _physicsTick++;
+        return mode switch
         {
             RawMouseEffectMode.CancelLookUp =>
                 (physicalX, physicalY < 0 ? 0 : physicalY),
@@ -501,8 +517,102 @@ public sealed class RawMouseEffectService : IDisposable
                 (-physicalX, -physicalY),
             RawMouseEffectMode.Scale =>
                 (physicalX * multiplier, physicalY * multiplier),
+            RawMouseEffectMode.Momentum =>
+                CalculateMomentum(physicalX, physicalY),
+            RawMouseEffectMode.Elastic =>
+                CalculateElastic(physicalX, physicalY),
+            RawMouseEffectMode.Gravity =>
+                (physicalX, physicalY + 2.6),
+            RawMouseEffectMode.Magnet =>
+                CalculateMagnet(physicalX, physicalY),
+            RawMouseEffectMode.Orbit =>
+                CalculateOrbit(physicalX, physicalY),
+            RawMouseEffectMode.Deadzone =>
+                CalculateDeadzone(physicalX, physicalY),
+            RawMouseEffectMode.Wind =>
+                CalculateWind(physicalX, physicalY),
+            RawMouseEffectMode.Friction =>
+                CalculateFriction(physicalX, physicalY),
             _ => (physicalX, physicalY)
         };
+    }
+
+    private (double X, double Y) CalculateMomentum(int physicalX, int physicalY)
+    {
+        _physicsVelocityX = _physicsVelocityX * 0.86 + physicalX * 0.32;
+        _physicsVelocityY = _physicsVelocityY * 0.86 + physicalY * 0.32;
+        return (physicalX + _physicsVelocityX, physicalY + _physicsVelocityY);
+    }
+
+    private (double X, double Y) CalculateElastic(int physicalX, int physicalY)
+    {
+        _virtualPositionX += physicalX;
+        _virtualPositionY += physicalY;
+        _physicsVelocityX = (_physicsVelocityX + physicalX * 0.55 - _virtualPositionX * 0.075) * 0.91;
+        _physicsVelocityY = (_physicsVelocityY + physicalY * 0.55 - _virtualPositionY * 0.075) * 0.91;
+        _virtualPositionX += _physicsVelocityX;
+        _virtualPositionY += _physicsVelocityY;
+        return (physicalX + _physicsVelocityX, physicalY + _physicsVelocityY);
+    }
+
+    private (double X, double Y) CalculateMagnet(int physicalX, int physicalY)
+    {
+        _virtualPositionX = Math.Clamp(_virtualPositionX + physicalX, -900, 900);
+        _virtualPositionY = Math.Clamp(_virtualPositionY + physicalY, -900, 900);
+        double pullX = -_virtualPositionX * 0.035;
+        double pullY = -_virtualPositionY * 0.035;
+        _virtualPositionX += pullX;
+        _virtualPositionY += pullY;
+        return (physicalX + pullX, physicalY + pullY);
+    }
+
+    private (double X, double Y) CalculateOrbit(int physicalX, int physicalY)
+    {
+        double angle = _physicsTick * 0.105;
+        return (
+            physicalX + Math.Cos(angle) * 3.4,
+            physicalY + Math.Sin(angle) * 3.4);
+    }
+
+    private (double X, double Y) CalculateDeadzone(int physicalX, int physicalY)
+    {
+        if (physicalX == 0 && physicalY == 0)
+        {
+            if (++_deadzoneIdleTicks >= 15)
+            {
+                _virtualPositionX = 0;
+                _virtualPositionY = 0;
+            }
+            return (0, 0);
+        }
+
+        _deadzoneIdleTicks = 0;
+        _virtualPositionX += physicalX;
+        _virtualPositionY += physicalY;
+        double distance = Math.Sqrt(
+            _virtualPositionX * _virtualPositionX +
+            _virtualPositionY * _virtualPositionY);
+        return distance <= 20
+            ? (0, 0)
+            : (physicalX, physicalY);
+    }
+
+    private (double X, double Y) CalculateWind(int physicalX, int physicalY)
+    {
+        if (_physicsTick % 10 == 1)
+        {
+            _windX = _windX * 0.72 + (_physicsRandom.NextDouble() * 7 - 3.5);
+            _windY = _windY * 0.72 + (_physicsRandom.NextDouble() * 5 - 2.5);
+        }
+        return (physicalX + _windX, physicalY + _windY);
+    }
+
+    private (double X, double Y) CalculateFriction(int physicalX, int physicalY)
+    {
+        double seconds = _physicsTick * PumpIntervalMilliseconds / 1000.0;
+        double ramp = Math.Clamp(0.22 + seconds * 0.12, 0.22, 1.65);
+        return (physicalX * ramp, physicalY * ramp);
+    }
 
     private static int CalculateAdaptiveOutputLimit(
         RawMouseEffectMode mode,
@@ -586,6 +696,14 @@ public sealed class RawMouseEffectService : IDisposable
         Volatile.Write(ref _pumpActive, 0);
         _correctionDebtX = 0;
         _correctionDebtY = 0;
+        _physicsVelocityX = 0;
+        _physicsVelocityY = 0;
+        _virtualPositionX = 0;
+        _virtualPositionY = 0;
+        _windX = 0;
+        _windY = 0;
+        _physicsTick = 0;
+        _deadzoneIdleTicks = 0;
 
         lock (_rateLock)
         {
@@ -611,6 +729,10 @@ public sealed class RawMouseEffectService : IDisposable
         Interlocked.Exchange(ref _pendingY, 0);
         _correctionDebtX = 0;
         _correctionDebtY = 0;
+        _physicsVelocityX = 0;
+        _physicsVelocityY = 0;
+        _virtualPositionX = 0;
+        _virtualPositionY = 0;
         _stopped?.TrySetResult(failure);
     }
 
