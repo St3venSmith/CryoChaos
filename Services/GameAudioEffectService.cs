@@ -12,12 +12,10 @@ public enum GameAudioEffectMode
 {
     Echo,
     Reverse,
-    Radio,
     Underwater,
     PitchUp,
     PitchDown,
-    Reverb,
-    RandomStatic
+    Reverb
 }
 
 /// <summary>
