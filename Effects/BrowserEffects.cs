@@ -87,9 +87,24 @@ public abstract class RandomYouTubeEffectBase : IChaosEffect
             }
 
             GameMonitorPlacementService.MakeMiniPlayerClickThrough(browserWindow);
-            await Task.Delay(
-                context.GetEffectDuration(Definition),
-                cancellationToken);
+            DateTimeOffset closeAt = DateTimeOffset.UtcNow.Add(
+                context.GetEffectDuration(Definition));
+            while (DateTimeOffset.UtcNow < closeAt)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                GameMonitorPlacementService.MakeMiniPlayerClickThrough(browserWindow);
+                TimeSpan remaining = closeAt - DateTimeOffset.UtcNow;
+                if (remaining <= TimeSpan.Zero)
+                {
+                    break;
+                }
+
+                await Task.Delay(
+                    remaining < TimeSpan.FromMilliseconds(250)
+                        ? remaining
+                        : TimeSpan.FromMilliseconds(250),
+                    cancellationToken);
+            }
         }
         finally
         {
