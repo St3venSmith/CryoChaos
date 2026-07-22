@@ -11,7 +11,7 @@
         Foreground="White"
         Topmost="True"
         ShowInTaskbar="False"
-        WindowStartupLocation="CenterScreen">
+        WindowStartupLocation="Manual">
     <Border Background="#F20B0E16"
             BorderBrush="#7C5CFC"
             BorderThickness="2"
