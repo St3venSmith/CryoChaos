@@ -9,6 +9,15 @@ internal static class GameMonitorPlacementService
     private static readonly IntPtr HwndTopmost = new(-1);
     private const uint SwpNoActivate = 0x0010;
     private const uint SwpShowWindow = 0x0040;
+    private const uint SwpNoMove = 0x0002;
+    private const uint SwpNoSize = 0x0001;
+    private const uint SwpNoZOrder = 0x0004;
+    private const uint SwpFrameChanged = 0x0020;
+    private const int GwlExStyle = -20;
+    private const int WsExTransparent = 0x00000020;
+    private const int WsExToolWindow = 0x00000080;
+    private const int WsExNoActivate = 0x08000000;
+    private const uint WmClose = 0x0010;
 
     public static void CenterOnGameMonitor(Window window, bool activate)
     {
@@ -52,8 +61,38 @@ internal static class GameMonitorPlacementService
             width, height, SwpShowWindow | SwpNoActivate);
     }
 
+    public static void MakeMiniPlayerClickThrough(IntPtr window)
+    {
+        if (window == IntPtr.Zero) return;
+        int style = GetWindowLong(window, GwlExStyle);
+        _ = SetWindowLong(window, GwlExStyle,
+            style | WsExTransparent | WsExToolWindow | WsExNoActivate);
+        _ = SetWindowPos(window, IntPtr.Zero, 0, 0, 0, 0,
+            SwpNoMove | SwpNoSize | SwpNoZOrder |
+            SwpNoActivate | SwpFrameChanged);
+    }
+
+    public static void CloseMiniPlayer(IntPtr window)
+    {
+        if (window != IntPtr.Zero)
+        {
+            _ = PostMessage(window, WmClose, IntPtr.Zero, IntPtr.Zero);
+        }
+    }
+
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool SetWindowPos(
         IntPtr hwnd, IntPtr insertAfter, int x, int y, int width, int height, uint flags);
+
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongW", SetLastError = true)]
+    private static extern int GetWindowLong(IntPtr hwnd, int index);
+
+    [DllImport("user32.dll", EntryPoint = "SetWindowLongW", SetLastError = true)]
+    private static extern int SetWindowLong(IntPtr hwnd, int index, int value);
+
+    [DllImport("user32.dll", EntryPoint = "PostMessageW", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool PostMessage(
+        IntPtr hwnd, uint message, IntPtr wParam, IntPtr lParam);
 }
