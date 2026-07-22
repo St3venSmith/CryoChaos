@@ -193,3 +193,100 @@ public sealed class InvertCameraEffect : RawMouseChaosEffectBase
     protected override RawMouseEffectMode Mode => RawMouseEffectMode.InvertBoth;
     protected override int BaseOutputLimit => 420;
 }
+
+public sealed class MouseMomentumEffect : RawMouseChaosEffectBase
+{
+    public override ChaosEffectDefinition Definition { get; } = PhysicsDefinition(
+        "raw_mouse_momentum", "Aim Momentum",
+        "Mouse movement keeps gliding after the physical mouse stops.", 16, 65);
+    protected override RawMouseEffectMode Mode => RawMouseEffectMode.Momentum;
+    protected override int BaseOutputLimit => 300;
+    private static ChaosEffectDefinition PhysicsDefinition(string id, string name, string description, int duration, int cooldown) =>
+        MousePhysicsDefinitions.Create(id, name, description, duration, cooldown);
+}
+
+public sealed class MouseElasticEffect : RawMouseChaosEffectBase
+{
+    public override ChaosEffectDefinition Definition { get; } = MousePhysicsDefinitions.Create(
+        "raw_mouse_elastic", "Rubber Aim",
+        "Camera movement overshoots and springs back like elastic.", 15, 70);
+    protected override RawMouseEffectMode Mode => RawMouseEffectMode.Elastic;
+    protected override int BaseOutputLimit => 340;
+}
+
+public sealed class MouseGravityEffect : RawMouseChaosEffectBase
+{
+    public override ChaosEffectDefinition Definition { get; } = MousePhysicsDefinitions.Create(
+        "raw_mouse_gravity", "Heavy Crosshair",
+        "A constant downward force drags the camera.", 16, 60);
+    protected override RawMouseEffectMode Mode => RawMouseEffectMode.Gravity;
+    protected override int BaseOutputLimit => 120;
+}
+
+public sealed class MouseMagnetEffect : RawMouseChaosEffectBase
+{
+    public override ChaosEffectDefinition Definition { get; } = MousePhysicsDefinitions.Create(
+        "raw_mouse_magnet", "Magnetic Aim",
+        "Camera movement is pulled back toward its starting center.", 15, 70);
+    protected override RawMouseEffectMode Mode => RawMouseEffectMode.Magnet;
+    protected override int BaseOutputLimit => 260;
+}
+
+public sealed class MouseOrbitEffect : RawMouseChaosEffectBase
+{
+    public override ChaosEffectDefinition Definition { get; } = MousePhysicsDefinitions.Create(
+        "raw_mouse_orbit", "Orbital Aim",
+        "The camera is continuously pushed around a circular path.", 14, 75,
+        ChaosLevel.Chaos);
+    protected override RawMouseEffectMode Mode => RawMouseEffectMode.Orbit;
+    protected override int BaseOutputLimit => 120;
+}
+
+public sealed class MouseDeadzoneEffect : RawMouseChaosEffectBase
+{
+    public override ChaosEffectDefinition Definition { get; } = MousePhysicsDefinitions.Create(
+        "raw_mouse_deadzone", "Twenty Pixel Tax",
+        "The first 20 counts of each mouse movement are ignored.", 16, 65);
+    protected override RawMouseEffectMode Mode => RawMouseEffectMode.Deadzone;
+    protected override int BaseOutputLimit => 280;
+}
+
+public sealed class MouseWindEffect : RawMouseChaosEffectBase
+{
+    public override ChaosEffectDefinition Definition { get; } = MousePhysicsDefinitions.Create(
+        "raw_mouse_wind", "Crosswind",
+        "Smooth random gusts push the camera in changing directions.", 16, 60);
+    protected override RawMouseEffectMode Mode => RawMouseEffectMode.Wind;
+    protected override int BaseOutputLimit => 140;
+}
+
+public sealed class MouseFrictionEffect : RawMouseChaosEffectBase
+{
+    public override ChaosEffectDefinition Definition { get; } = MousePhysicsDefinitions.Create(
+        "raw_mouse_friction", "Breaking Loose",
+        "Mouse movement starts extremely slow and accelerates over time.", 18, 65);
+    protected override RawMouseEffectMode Mode => RawMouseEffectMode.Friction;
+    protected override int BaseOutputLimit => 300;
+}
+
+internal static class MousePhysicsDefinitions
+{
+    public static ChaosEffectDefinition Create(
+        string id,
+        string name,
+        string description,
+        int duration,
+        int cooldown,
+        ChaosLevel minimumLevel = ChaosLevel.Normal) => new()
+        {
+            Id = id,
+            Name = name,
+            Description = description,
+            Type = ChaosEffectType.Keybind,
+            MinimumLevel = minimumLevel,
+            Weight = 10,
+            DurationSeconds = duration,
+            CooldownSeconds = cooldown,
+            CanStack = false
+        };
+}
