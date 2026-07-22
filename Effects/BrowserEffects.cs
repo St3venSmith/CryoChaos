@@ -68,6 +68,7 @@ public abstract class RandomYouTubeEffectBase : IChaosEffect
             : FindBrowserWindow(requireYouTubeTitle: false);
         if (browserWindow != IntPtr.Zero)
         {
+            GameMonitorPlacementService.PlaceMiniPlayer(browserWindow);
             TryForceForegroundWindow(browserWindow);
             await Task.Delay(200, cancellationToken);
         }
