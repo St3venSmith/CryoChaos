@@ -216,7 +216,6 @@ public sealed class QteService : IDisposable
                 ShowInTaskbar = false,
                 Topmost = true,
                 ShowActivated = false,
-                WindowState = WindowState.Maximized,
                 Content = background
             };
             _window.SourceInitialized += (_, _) =>
@@ -225,6 +224,7 @@ public sealed class QteService : IDisposable
                 int style = GetWindowLong(hwnd, GwlExstyle);
                 SetWindowLong(hwnd, GwlExstyle,
                     style | WsExTransparent | WsExToolwindow | WsExNoactivate);
+                GameMonitorPlacementService.FillGameMonitor(_window, activate: false);
             };
             _window.Show();
         });
@@ -279,7 +279,7 @@ public sealed class QteService : IDisposable
             ShowInTaskbar = false,
             Topmost = true,
             ShowActivated = false,
-            WindowStartupLocation = WindowStartupLocation.CenterScreen,
+            WindowStartupLocation = WindowStartupLocation.Manual,
             Content = card
         };
         _window.SourceInitialized += (_, _) =>
@@ -287,6 +287,7 @@ public sealed class QteService : IDisposable
             IntPtr hwnd = new WindowInteropHelper(_window).Handle;
             int style = GetWindowLong(hwnd, GwlExstyle);
             SetWindowLong(hwnd, GwlExstyle, style | WsExTransparent | WsExToolwindow | WsExNoactivate);
+            GameMonitorPlacementService.CenterOnGameMonitor(_window, activate: false);
         };
         _window.Show();
     });
