@@ -172,7 +172,12 @@ public static class InputBindingParser
             "mousebutton3" or
             "middlemouse" or
             "middlemousebutton" or
-            "mousemiddle" =>
+            "mousemiddle" or
+            "middlebutton" or
+            "mbutton" or
+            "wheelbutton" or
+            "wheelclick" or
+            "mousewheelclick" =>
                 MouseInputButton.Middle,
 
             // Destiny writes side buttons in this form.

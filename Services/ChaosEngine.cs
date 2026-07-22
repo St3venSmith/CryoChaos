@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.Reflection;
 using CryoChaos.Effects;
 using CryoChaos.Models;
 using CryoChaos.Views;
@@ -8,6 +9,11 @@ namespace CryoChaos.Services;
 
 public sealed class ChaosEngine : IDisposable
 {
+    public const int MaximumSupportedActiveEffects = 50;
+    private const int StandardEffectWeight = 10;
+    private const int ScreenTransformWeight = 1;
+    private int _maximumActiveEffects = 3;
+
     private readonly IReadOnlyList<IChaosEffect> _effects;
     private readonly Dictionary<string, DateTimeOffset> _cooldowns =
         new(StringComparer.OrdinalIgnoreCase);
@@ -20,6 +26,12 @@ public sealed class ChaosEngine : IDisposable
     private readonly OverlayWindow _overlay;
     private readonly DestinyKeybindService _keybinds;
     private readonly KeyboardInputService _input;
+    private readonly KeyboardRemapService _inputRemapper;
+    private readonly RawMouseEffectService _rawMouseEffects;
+    private readonly SoundEffectService _soundEffects;
+    private readonly GameAudioEffectService _gameAudioEffects;
+    private readonly VideoOverlayService _videoOverlay;
+    private readonly QteService _qte;
     private readonly IScreenTransformService _screenTransform;
 
     private CancellationTokenSource? _runCancellation;
@@ -29,45 +41,111 @@ public sealed class ChaosEngine : IDisposable
         OverlayWindow overlay,
         DestinyKeybindService keybinds,
         KeyboardInputService input,
+        KeyboardRemapService inputRemapper,
+        RawMouseEffectService rawMouseEffects,
+        SoundEffectService soundEffects,
+        GameAudioEffectService gameAudioEffects,
+        VideoOverlayService videoOverlay,
+        QteService qte,
         IScreenTransformService screenTransform)
     {
         _overlay = overlay;
         _keybinds = keybinds;
         _input = input;
+        _inputRemapper = inputRemapper;
+        _rawMouseEffects = rawMouseEffects;
+        _soundEffects = soundEffects;
+        _gameAudioEffects = gameAudioEffects;
+        _videoOverlay = videoOverlay;
+        _qte = qte;
         _screenTransform = screenTransform;
 
-        _effects =
-        [
-            new RedTintEffect(),
-            new TunnelVisionEffect(),
-            new BlackoutPulseEffect(),
-            new MovingBlockEffect(),
+        _effects = DiscoverEffects();
 
-            new UpsideDownEffect(),
-            new SidewaysLeftEffect(),
-            new SidewaysRightEffect(),
-            new MirrorScreenEffect(),
-            new VerticalFlipEffect(),
-
-            new SurpriseJumpEffect(),
-            new ForcedCrouchEffect(),
-            new WeaponPanicEffect(),
-            new StepBackwardEffect(),
-
-            new LookLeftEffect(),
-            new LookRightEffect(),
-            new LookUpEffect(),
-            new LookDownEffect(),
-            new CameraJoltEffect()
-        ];
+        // Keep ordinary effects evenly distributed even as new classes are
+        // auto-discovered. Screen transforms are deliberately much rarer as
+        // a group because there are many more transform variants than most
+        // other effect families.
+        foreach (IChaosEffect effect in _effects)
+        {
+            effect.Definition.Weight =
+                effect.Definition.Type == ChaosEffectType.ScreenTransform
+                    ? ScreenTransformWeight
+                    : StandardEffectWeight;
+        }
 
         Effects = new ObservableCollection<ChaosEffectDefinition>(
             _effects.Select(effect => effect.Definition));
     }
 
+    private static IReadOnlyList<IChaosEffect> DiscoverEffects()
+    {
+        Type effectInterface = typeof(IChaosEffect);
+
+        List<IChaosEffect> effects = effectInterface.Assembly
+            .GetTypes()
+            .Where(type =>
+                type.IsClass &&
+                !type.IsAbstract &&
+                effectInterface.IsAssignableFrom(type) &&
+                type.GetCustomAttribute<ChaosEffectTemplateAttribute>() is null)
+            .Select(CreateEffect)
+            .OrderBy(effect => effect.Definition.Type)
+            .ThenBy(effect => effect.Definition.MinimumLevel)
+            .ThenBy(effect => effect.Definition.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        string[] duplicateIds = effects
+            .GroupBy(
+                effect => effect.Definition.Id,
+                StringComparer.OrdinalIgnoreCase)
+            .Where(group => group.Count() > 1)
+            .Select(group => group.Key)
+            .ToArray();
+
+        if (duplicateIds.Length > 0)
+        {
+            throw new InvalidOperationException(
+                $"Chaos effect IDs must be unique. Duplicates: {string.Join(", ", duplicateIds)}");
+        }
+
+        return effects;
+    }
+
+    private static IChaosEffect CreateEffect(Type effectType)
+    {
+        try
+        {
+            return (IChaosEffect)(Activator.CreateInstance(effectType) ??
+                throw new InvalidOperationException("Activator returned null."));
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException(
+                $"Could not create chaos effect '{effectType.FullName}'. " +
+                "Effects must have a parameterless constructor.",
+                ex);
+        }
+    }
+
     public ObservableCollection<ChaosEffectDefinition> Effects { get; }
 
     public bool IsRunning => _runCancellation is not null;
+
+    public void SetMaximumActiveEffects(int value)
+    {
+        if (value is < 1 or > MaximumSupportedActiveEffects)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(value),
+                $"Maximum active effects must be between 1 and {MaximumSupportedActiveEffects}.");
+        }
+
+        lock (_sync)
+        {
+            _maximumActiveEffects = value;
+        }
+    }
 
     public event EventHandler<string>? StatusChanged;
     public event EventHandler<string>? EffectStarted;
@@ -202,6 +280,9 @@ public sealed class ChaosEngine : IDisposable
         }
         catch (Exception ex)
         {
+            CrashLogService.WriteException(
+                "CHAOS ENGINE LOOP",
+                ex);
             StatusChanged?.Invoke(
                 this,
                 $"Engine error: {ex.Message}");
@@ -239,9 +320,9 @@ public sealed class ChaosEngine : IDisposable
                 total);
 
             TimeSpan updateDelay =
-                remaining < TimeSpan.FromMilliseconds(100)
+                remaining < TimeSpan.FromMilliseconds(33)
                     ? remaining
-                    : TimeSpan.FromMilliseconds(100);
+                    : TimeSpan.FromMilliseconds(33);
 
             await Task.Delay(
                 updateDelay,
@@ -250,7 +331,8 @@ public sealed class ChaosEngine : IDisposable
     }
 
     private IChaosEffect? SelectEffect(
-        ChaosLevel selectedLevel)
+        ChaosLevel selectedLevel,
+        bool requireStackable = false)
     {
         DateTimeOffset now = DateTimeOffset.UtcNow;
 
@@ -258,6 +340,11 @@ public sealed class ChaosEngine : IDisposable
 
         lock (_sync)
         {
+            if (_activeEffects.Count >= _maximumActiveEffects)
+            {
+                return null;
+            }
+
             bool anyActiveEffect =
                 _activeEffects.Count > 0;
 
@@ -268,6 +355,7 @@ public sealed class ChaosEngine : IDisposable
             eligible = _effects
                 .Where(effect =>
                     effect.Definition.Enabled &&
+                    (!requireStackable || effect.Definition.CanStack) &&
                     effect.Definition.MinimumLevel <= selectedLevel &&
                     (!_cooldowns.TryGetValue(
                          effect.Definition.Id,
@@ -317,6 +405,8 @@ public sealed class ChaosEngine : IDisposable
         bool requireDestinyForeground,
         CancellationToken cancellationToken)
     {
+        int queuedRandomEffects = 0;
+
         lock (_sync)
         {
             // A non-stackable effect may have started after this effect was
@@ -328,7 +418,8 @@ public sealed class ChaosEngine : IDisposable
                 _activeEffects.Values.Any(activeEffect =>
                     !activeEffect.Definition.CanStack);
 
-            if (nonStackableEffectIsActive ||
+            if (_activeEffects.Count >= _maximumActiveEffects ||
+                nonStackableEffectIsActive ||
                 (!effect.Definition.CanStack &&
                  anyActiveEffect))
             {
@@ -346,7 +437,8 @@ public sealed class ChaosEngine : IDisposable
             TimeSpan.FromSeconds(
                 Math.Max(
                     1,
-                    effect.Definition.DurationSeconds));
+                    effect.Definition.DurationSeconds)) *
+            ChaosEffectContext.GetDurationMultiplier(selectedLevel);
 
         _overlay.AddActiveEffect(
             effect.Definition.Id,
@@ -368,6 +460,21 @@ public sealed class ChaosEngine : IDisposable
                 Overlay = _overlay,
                 Keybinds = _keybinds,
                 Input = _input,
+                InputRemapper = _inputRemapper,
+                RawMouseEffects = _rawMouseEffects,
+                SoundEffects = _soundEffects,
+                GameAudioEffects = _gameAudioEffects,
+                VideoOverlay = _videoOverlay,
+                Qte = _qte,
+                QueueRandomEffects = count =>
+                    Interlocked.Add(
+                        ref queuedRandomEffects,
+                        Math.Clamp(count, 0, 10)),
+                TryTriggerRandomEffectNow = () =>
+                    TryStartRandomEffectNow(
+                        selectedLevel,
+                        requireDestinyForeground,
+                        cancellationToken),
                 ScreenTransform = _screenTransform,
                 Random = _random,
                 RequireDestinyForeground =
@@ -383,7 +490,11 @@ public sealed class ChaosEngine : IDisposable
             TimeSpan remainingDisplay =
                 displayDuration - displayStopwatch.Elapsed;
 
-            if (remainingDisplay > TimeSpan.Zero)
+            // A substituted/penalty effect should begin as soon as the
+            // current effect requests it, rather than waiting out the
+            // current effect's display-only duration.
+            if (queuedRandomEffects == 0 &&
+                remainingDisplay > TimeSpan.Zero)
             {
                 await Task.Delay(
                     remainingDisplay,
@@ -395,6 +506,9 @@ public sealed class ChaosEngine : IDisposable
         }
         catch (Exception ex)
         {
+            CrashLogService.WriteException(
+                $"EFFECT FAILED: {effect.Definition.Id}",
+                ex);
             StatusChanged?.Invoke(
                 this,
                 $"{effect.Definition.Name} failed: {ex.Message}");
@@ -414,10 +528,54 @@ public sealed class ChaosEngine : IDisposable
                 this,
                 effect.Definition.Name);
         }
+
+        if (queuedRandomEffects > 0 &&
+            !cancellationToken.IsCancellationRequested)
+        {
+            for (int index = 0; index < queuedRandomEffects; index++)
+            {
+                IChaosEffect? penalty = SelectEffect(selectedLevel, requireStackable: true);
+                if (penalty is null)
+                {
+                    break;
+                }
+
+                _ = StartEffectAsync(
+                    penalty,
+                    selectedLevel,
+                    requireDestinyForeground,
+                    cancellationToken);
+            }
+        }
     }
 
     public void Dispose()
     {
         Stop();
     }
+
+    private bool TryStartRandomEffectNow(
+        ChaosLevel selectedLevel,
+        bool requireDestinyForeground,
+        CancellationToken cancellationToken)
+    {
+        if (cancellationToken.IsCancellationRequested)
+        {
+            return false;
+        }
+
+        IChaosEffect? selected = SelectEffect(selectedLevel, requireStackable: true);
+        if (selected is null)
+        {
+            return false;
+        }
+
+        _ = StartEffectAsync(
+            selected,
+            selectedLevel,
+            requireDestinyForeground,
+            cancellationToken);
+        return true;
+    }
+
 }

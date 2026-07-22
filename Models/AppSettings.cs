@@ -6,5 +6,6 @@ public sealed class AppSettings
     public int MinimumIntervalSeconds { get; set; } = 35;
     public int MaximumIntervalSeconds { get; set; } = 70;
     public bool RequireDestinyForeground { get; set; } = true;
+    public int MaximumActiveEffects { get; set; } = 3;
     public HashSet<string> DisabledEffectIds { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 }

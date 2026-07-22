@@ -46,7 +46,7 @@ public partial class OverlayWindow : Window
 
         _hudTimer = new DispatcherTimer(DispatcherPriority.Render)
         {
-            Interval = TimeSpan.FromMilliseconds(100)
+            Interval = TimeSpan.FromMilliseconds(33)
         };
         _hudTimer.Tick += (_, _) => RefreshCurrentEffectHud();
         _hudTimer.Start();
@@ -333,26 +333,57 @@ public partial class OverlayWindow : Window
             _activeHudEffects.Remove(expiredId);
         }
 
-        ActiveHudEffect? current = _activeHudEffects.Values
-            .OrderByDescending(effect => effect.StartedAt)
-            .FirstOrDefault();
+        ActiveEffectsPanel.Children.Clear();
+        ActiveHudEffect[] activeEffects = _activeHudEffects.Values
+            .OrderBy(effect => effect.EndsAt)
+            .ToArray();
 
-        if (current is null)
+        ActiveEffectsHeaderTextBlock.Text = activeEffects.Length == 0
+            ? "ACTIVE EFFECTS"
+            : $"ACTIVE EFFECTS  ({activeEffects.Length})";
+
+        if (activeEffects.Length == 0)
         {
-            CurrentEffectNameTextBlock.Text = "No active effect";
-            CurrentEffectTimerTextBlock.Text = _engineRunning
-                ? "Waiting for the next effect"
-                : "Chaos is stopped";
+            ActiveEffectsPanel.Children.Add(new TextBlock
+            {
+                Text = _engineRunning ? "Waiting for the next effect" : "Chaos is stopped",
+                Foreground = new SolidColorBrush(Color.FromRgb(215, 217, 226)),
+                FontSize = 12
+            });
             return;
         }
 
-        int additionalCount = Math.Max(0, _activeHudEffects.Count - 1);
-        CurrentEffectNameTextBlock.Text = additionalCount > 0
-            ? $"{current.Name}  (+{additionalCount})"
-            : current.Name;
+        foreach (ActiveHudEffect effect in activeEffects)
+        {
+            Grid row = new()
+            {
+                Margin = new Thickness(0, 2, 0, 2)
+            };
+            row.ColumnDefinitions.Add(new ColumnDefinition());
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-        TimeSpan remaining = current.EndsAt - now;
-        CurrentEffectTimerTextBlock.Text = $"{FormatTime(remaining)} remaining";
+            TextBlock name = new()
+            {
+                Text = effect.Name,
+                Foreground = Brushes.White,
+                FontSize = 14,
+                FontWeight = FontWeights.SemiBold,
+                TextTrimming = TextTrimming.CharacterEllipsis
+            };
+            TextBlock timer = new()
+            {
+                Text = FormatTime(effect.EndsAt - now),
+                Foreground = new SolidColorBrush(Color.FromRgb(190, 178, 255)),
+                FontSize = 12,
+                FontWeight = FontWeights.Bold,
+                Margin = new Thickness(12, 0, 0, 0),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            Grid.SetColumn(timer, 1);
+            row.Children.Add(name);
+            row.Children.Add(timer);
+            ActiveEffectsPanel.Children.Add(row);
+        }
     }
 
     private async Task AddForDurationAsync(
