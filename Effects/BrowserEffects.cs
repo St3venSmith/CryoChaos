@@ -35,12 +35,12 @@ public abstract class RandomYouTubeEffectBase : IChaosEffect
         }
 
         string selected = AddAutoplay(validUrls[context.Random.Next(validUrls.Length)]);
-        string browserPath = FindBraveBrowser() ??
+        string browserPath = FindDefaultBrowser() ??
             throw new InvalidOperationException(
-                "The YouTube mini-player requires Brave Browser. Install Brave, then run the effect again.");
+                "Windows does not have a default HTTPS browser configured.");
 
         HashSet<IntPtr> windowsBeforeLaunch = GetBrowserWindows();
-        using Process browserProcess = StartAppModeBrowser(browserPath, selected);
+        using Process browserProcess = StartMiniPlayerBrowser(browserPath, selected);
         uint launchedProcessId = (uint)browserProcess.Id;
 
         // Keep Destiny active while the new tab loads. A YouTube window title
@@ -106,38 +106,57 @@ public abstract class RandomYouTubeEffectBase : IChaosEffect
         }
     }
 
-    private static Process StartAppModeBrowser(string browserPath, string url)
+    private static Process StartMiniPlayerBrowser(string browserPath, string url)
     {
         ProcessStartInfo startInfo = new(browserPath)
         {
             UseShellExecute = false
         };
-        startInfo.ArgumentList.Add($"--app={url}");
-        startInfo.ArgumentList.Add("--new-window");
-        startInfo.ArgumentList.Add("--no-first-run");
-        startInfo.ArgumentList.Add("--autoplay-policy=no-user-gesture-required");
+
+        string browserName = Path.GetFileNameWithoutExtension(browserPath);
+        if (browserName.Equals("firefox", StringComparison.OrdinalIgnoreCase))
+        {
+            startInfo.ArgumentList.Add("--new-window");
+            startInfo.ArgumentList.Add(url);
+        }
+        else
+        {
+            // Edge, Chrome, Brave, Vivaldi, and other Chromium browsers use
+            // their normal signed-in profile when launched in app mode.
+            startInfo.ArgumentList.Add($"--app={url}");
+            startInfo.ArgumentList.Add("--new-window");
+            startInfo.ArgumentList.Add("--no-first-run");
+            startInfo.ArgumentList.Add("--autoplay-policy=no-user-gesture-required");
+        }
 
         return Process.Start(startInfo) ??
             throw new Win32Exception("The YouTube mini-player browser did not start.");
     }
 
-    private static string? FindBraveBrowser()
+    private static string? FindDefaultBrowser()
     {
-        string programFiles = Environment.GetFolderPath(
-            Environment.SpecialFolder.ProgramFiles);
-        string programFilesX86 = Environment.GetFolderPath(
-            Environment.SpecialFolder.ProgramFilesX86);
-        string localAppData = Environment.GetFolderPath(
-            Environment.SpecialFolder.LocalApplicationData);
+        uint length = 0;
+        _ = AssocQueryString(
+            0,
+            AssocStrExecutable,
+            "https",
+            null,
+            null,
+            ref length);
+        if (length == 0) return null;
 
-        string[] candidates =
-        [
-            Path.Combine(programFiles, "BraveSoftware", "Brave-Browser", "Application", "brave.exe"),
-            Path.Combine(programFilesX86, "BraveSoftware", "Brave-Browser", "Application", "brave.exe"),
-            Path.Combine(localAppData, "BraveSoftware", "Brave-Browser", "Application", "brave.exe")
-        ];
-
-        return candidates.FirstOrDefault(File.Exists);
+        StringBuilder path = new((int)length);
+        int result = AssocQueryString(
+            0,
+            AssocStrExecutable,
+            "https",
+            null,
+            path,
+            ref length);
+        string executable = path.ToString();
+        return result == 0 && File.Exists(executable)
+            ? executable
+            : null;
     }
 
     private static string AddAutoplay(string value)
@@ -234,6 +253,7 @@ public abstract class RandomYouTubeEffectBase : IChaosEffect
     {
         string className = GetWindowClass(window);
         return className.Equals("Chrome_WidgetWin_1", StringComparison.OrdinalIgnoreCase) ||
+               className.Equals("MozillaWindowClass", StringComparison.OrdinalIgnoreCase) ||
                className.Equals("ApplicationFrameWindow", StringComparison.OrdinalIgnoreCase);
     }
 
@@ -321,6 +341,17 @@ public abstract class RandomYouTubeEffectBase : IChaosEffect
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool SetForegroundWindow(IntPtr window);
+
+    private const int AssocStrExecutable = 2;
+
+    [DllImport("shlwapi.dll", CharSet = CharSet.Unicode)]
+    private static extern int AssocQueryString(
+        int flags,
+        int associationString,
+        string association,
+        string? extra,
+        StringBuilder? output,
+        ref uint outputLength);
 }
 
 public sealed class RandomYouTubeVideoEffect : RandomYouTubeEffectBase
@@ -329,7 +360,7 @@ public sealed class RandomYouTubeVideoEffect : RandomYouTubeEffectBase
     {
         Id = "random_youtube_video",
         Name = "Unexpected YouTube",
-        Description = "Opens one random video in a click-through Brave mini-player over the game.",
+        Description = "Opens one random video in the signed-in default browser over the game.",
         Type = ChaosEffectType.Keybind,
         MinimumLevel = ChaosLevel.Chaos,
         Weight = 5,
