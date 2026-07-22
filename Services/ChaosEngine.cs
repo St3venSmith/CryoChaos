@@ -18,7 +18,7 @@ public sealed class ChaosEngine : IDisposable
     private readonly Dictionary<string, DateTimeOffset> _cooldowns =
         new(StringComparer.OrdinalIgnoreCase);
 
-    private readonly Dictionary<string, IChaosEffect> _activeEffects =
+    private readonly Dictionary<string, ActiveEffect> _activeEffects =
         new(StringComparer.OrdinalIgnoreCase);
 
     private readonly object _sync = new();
@@ -33,6 +33,7 @@ public sealed class ChaosEngine : IDisposable
     private readonly VideoOverlayService _videoOverlay;
     private readonly QteService _qte;
     private readonly IScreenTransformService _screenTransform;
+    private readonly ChaosMutatorService _mutators;
 
     private CancellationTokenSource? _runCancellation;
     private Task? _loopTask;
@@ -59,6 +60,7 @@ public sealed class ChaosEngine : IDisposable
         _videoOverlay = videoOverlay;
         _qte = qte;
         _screenTransform = screenTransform;
+        _mutators = new ChaosMutatorService(CancelOtherEffects);
 
         _effects = DiscoverEffects();
 
@@ -197,9 +199,16 @@ public sealed class ChaosEngine : IDisposable
             cancellation.Dispose();
         }
 
+        ActiveEffect[] active;
         lock (_sync)
         {
+            active = _activeEffects.Values.ToArray();
             _activeEffects.Clear();
+        }
+
+        foreach (ActiveEffect effect in active)
+        {
+            TryCancel(effect.Cancellation);
         }
 
         _ = _screenTransform.StopAsync();
@@ -332,7 +341,8 @@ public sealed class ChaosEngine : IDisposable
 
     private IChaosEffect? SelectEffect(
         ChaosLevel selectedLevel,
-        bool requireStackable = false)
+        bool requireStackable = false,
+        bool excludeMutators = false)
     {
         DateTimeOffset now = DateTimeOffset.UtcNow;
 
@@ -345,16 +355,19 @@ public sealed class ChaosEngine : IDisposable
                 return null;
             }
 
-            bool anyActiveEffect =
-                _activeEffects.Count > 0;
+            bool anyActiveOrdinaryEffect =
+                _activeEffects.Values.Any(active =>
+                    active.Effect.Definition.Type != ChaosEffectType.Mutator);
 
             bool nonStackableEffectIsActive =
-                _activeEffects.Values.Any(effect =>
-                    !effect.Definition.CanStack);
+                _activeEffects.Values.Any(active =>
+                    active.Effect.Definition.Type != ChaosEffectType.Mutator &&
+                    !active.Effect.Definition.CanStack);
 
             eligible = _effects
                 .Where(effect =>
                     effect.Definition.Enabled &&
+                    (!excludeMutators || effect.Definition.Type != ChaosEffectType.Mutator) &&
                     (!requireStackable || effect.Definition.CanStack) &&
                     effect.Definition.MinimumLevel <= selectedLevel &&
                     (!_cooldowns.TryGetValue(
@@ -363,9 +376,11 @@ public sealed class ChaosEngine : IDisposable
                      readyAt <= now) &&
                     !_activeEffects.ContainsKey(
                         effect.Definition.Id) &&
-                    !nonStackableEffectIsActive &&
-                    (effect.Definition.CanStack ||
-                     !anyActiveEffect))
+                    (effect.Definition.Type == ChaosEffectType.Mutator ||
+                     (!_mutators.IsProtected &&
+                      !nonStackableEffectIsActive &&
+                      (effect.Definition.CanStack ||
+                       !anyActiveOrdinaryEffect))))
                 .ToList();
         }
 
@@ -403,42 +418,57 @@ public sealed class ChaosEngine : IDisposable
         IChaosEffect effect,
         ChaosLevel selectedLevel,
         bool requireDestinyForeground,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool suppressMutatorDuplication = false)
     {
         int queuedRandomEffects = 0;
+        CancellationTokenSource effectCancellation =
+            CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        ActiveEffect activeEffect = new(effect, effectCancellation);
 
         lock (_sync)
         {
             // A non-stackable effect may have started after this effect was
             // selected. Recheck before starting it.
             bool anyActiveEffect =
-                _activeEffects.Count > 0;
+                _activeEffects.Values.Any(active =>
+                    active.Effect.Definition.Type != ChaosEffectType.Mutator);
 
             bool nonStackableEffectIsActive =
-                _activeEffects.Values.Any(activeEffect =>
-                    !activeEffect.Definition.CanStack);
+                _activeEffects.Values.Any(active =>
+                    active.Effect.Definition.Type != ChaosEffectType.Mutator &&
+                    !active.Effect.Definition.CanStack);
+
+            bool isMutator =
+                effect.Definition.Type == ChaosEffectType.Mutator;
 
             if (_activeEffects.Count >= _maximumActiveEffects ||
-                nonStackableEffectIsActive ||
-                (!effect.Definition.CanStack &&
+                (!isMutator && _mutators.IsProtected) ||
+                (!isMutator && nonStackableEffectIsActive) ||
+                (!isMutator && !effect.Definition.CanStack &&
                  anyActiveEffect))
             {
+                effectCancellation.Dispose();
                 return;
             }
 
-            _activeEffects[effect.Definition.Id] = effect;
+            _activeEffects[effect.Definition.Id] = activeEffect;
 
             _cooldowns[effect.Definition.Id] =
                 DateTimeOffset.UtcNow.AddSeconds(
                     effect.Definition.CooldownSeconds);
         }
 
+        double runtimeDurationMultiplier =
+            _mutators.DurationMultiplier;
+
         TimeSpan displayDuration =
             TimeSpan.FromSeconds(
                 Math.Max(
                     1,
                     effect.Definition.DurationSeconds)) *
-            ChaosEffectContext.GetDurationMultiplier(selectedLevel);
+            ChaosEffectContext.GetDurationMultiplier(selectedLevel) *
+            runtimeDurationMultiplier;
 
         _overlay.AddActiveEffect(
             effect.Definition.Id,
@@ -451,6 +481,30 @@ public sealed class ChaosEngine : IDisposable
 
         Stopwatch displayStopwatch =
             Stopwatch.StartNew();
+
+        if (!suppressMutatorDuplication &&
+            effect.Definition.Type != ChaosEffectType.Mutator)
+        {
+            int extraEffects = _mutators.ExtraEffectCount;
+            for (int index = 0; index < extraEffects; index++)
+            {
+                IChaosEffect? extra = SelectEffect(
+                    selectedLevel,
+                    requireStackable: true,
+                    excludeMutators: true);
+                if (extra is null)
+                {
+                    break;
+                }
+
+                _ = StartEffectAsync(
+                    extra,
+                    selectedLevel,
+                    requireDestinyForeground,
+                    cancellationToken,
+                    suppressMutatorDuplication: true);
+            }
+        }
 
         try
         {
@@ -466,6 +520,9 @@ public sealed class ChaosEngine : IDisposable
                 GameAudioEffects = _gameAudioEffects,
                 VideoOverlay = _videoOverlay,
                 Qte = _qte,
+                Mutators = _mutators,
+                CurrentEffectId = effect.Definition.Id,
+                RuntimeDurationMultiplier = runtimeDurationMultiplier,
                 QueueRandomEffects = count =>
                     Interlocked.Add(
                         ref queuedRandomEffects,
@@ -483,7 +540,7 @@ public sealed class ChaosEngine : IDisposable
 
             await effect.RunAsync(
                 context,
-                cancellationToken);
+                effectCancellation.Token);
 
             // One-shot keybind effects finish almost immediately. Keep their
             // name visible for the configured duration so the player can read it.
@@ -498,7 +555,7 @@ public sealed class ChaosEngine : IDisposable
             {
                 await Task.Delay(
                     remainingDisplay,
-                    cancellationToken);
+                    effectCancellation.Token);
             }
         }
         catch (OperationCanceledException)
@@ -520,9 +577,16 @@ public sealed class ChaosEngine : IDisposable
 
             lock (_sync)
             {
-                _activeEffects.Remove(
-                    effect.Definition.Id);
+                if (_activeEffects.TryGetValue(
+                        effect.Definition.Id,
+                        out ActiveEffect? current) &&
+                    ReferenceEquals(current, activeEffect))
+                {
+                    _activeEffects.Remove(effect.Definition.Id);
+                }
             }
+
+            effectCancellation.Dispose();
 
             EffectFinished?.Invoke(
                 this,
@@ -577,5 +641,41 @@ public sealed class ChaosEngine : IDisposable
             cancellationToken);
         return true;
     }
+
+    private void CancelOtherEffects(string currentEffectId)
+    {
+        ActiveEffect[] toCancel;
+        lock (_sync)
+        {
+            toCancel = _activeEffects
+                .Where(pair => !pair.Key.Equals(
+                    currentEffectId,
+                    StringComparison.OrdinalIgnoreCase))
+                .Select(pair => pair.Value)
+                .ToArray();
+        }
+
+        foreach (ActiveEffect effect in toCancel)
+        {
+            TryCancel(effect.Cancellation);
+        }
+    }
+
+    private static void TryCancel(CancellationTokenSource cancellation)
+    {
+        try
+        {
+            cancellation.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // The effect completed between the active-state snapshot and the
+            // cancellation pass.
+        }
+    }
+
+    private sealed record ActiveEffect(
+        IChaosEffect Effect,
+        CancellationTokenSource Cancellation);
 
 }
