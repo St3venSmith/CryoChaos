@@ -129,11 +129,11 @@ public sealed class RawMouseEffectService : IDisposable
                 "Mouse correction output must be between 1 and 500.");
         }
 
-        if (duration <= TimeSpan.Zero || duration > TimeSpan.FromSeconds(60))
+        if (duration <= TimeSpan.Zero || duration > TimeSpan.FromMinutes(5))
         {
             throw new ArgumentOutOfRangeException(
                 nameof(duration),
-                "Raw mouse effects must last between 1 and 60 seconds.");
+                "Raw mouse effects must last between 1 second and 5 minutes.");
         }
 
         await _effectGate.WaitAsync(cancellationToken);
