@@ -41,44 +41,68 @@ public abstract class RandomYouTubeEffectBase : IChaosEffect
 
         HashSet<IntPtr> windowsBeforeLaunch = GetBrowserWindows();
         using Process browserProcess = StartAppModeBrowser(browserPath, selected);
+        uint launchedProcessId = (uint)browserProcess.Id;
 
         // Keep Destiny active while the new tab loads. A YouTube window title
         // is the best external signal available without browser automation.
         IntPtr browserWindow = IntPtr.Zero;
-        for (int index = 0; index < 32; index++)
+        try
         {
-            await Task.Delay(250, cancellationToken);
-            ForegroundWindowService.TryActivateDestinyWindow();
-            browserWindow = FindNewBrowserWindow(
-                windowsBeforeLaunch,
-                browserProcess.HasExited ? null : (uint)browserProcess.Id,
-                requireYouTubeTitle: true);
-            if (browserWindow != IntPtr.Zero && index >= 3)
+            for (int index = 0; index < 32; index++)
             {
-                break;
+                await Task.Delay(250, cancellationToken);
+                ForegroundWindowService.TryActivateDestinyWindow();
+                browserWindow = FindNewBrowserWindow(
+                    windowsBeforeLaunch,
+                    launchedProcessId,
+                    requireYouTubeTitle: true);
+                if (browserWindow != IntPtr.Zero && index >= 3)
+                {
+                    break;
+                }
             }
-        }
 
-        // Some browsers/media policies need a real activation before playback
-        // begins. Prefer the newly loaded YouTube-titled window, focus it very
-        // briefly, then return focus to Destiny.
-        browserWindow = browserWindow != IntPtr.Zero
-            ? browserWindow
-            : FindNewBrowserWindow(
-                windowsBeforeLaunch,
-                browserProcess.HasExited ? null : (uint)browserProcess.Id,
-                requireYouTubeTitle: false);
-        if (browserWindow != IntPtr.Zero)
-        {
+            // Some browsers/media policies need a real activation before
+            // playback begins. Focus only this new app window briefly.
+            browserWindow = browserWindow != IntPtr.Zero
+                ? browserWindow
+                : FindNewBrowserWindow(
+                    windowsBeforeLaunch,
+                    launchedProcessId,
+                    requireYouTubeTitle: false);
+            if (browserWindow == IntPtr.Zero)
+            {
+                throw new InvalidOperationException(
+                    "The dedicated YouTube mini-player window could not be found.");
+            }
+
             GameMonitorPlacementService.PlaceMiniPlayer(browserWindow);
             TryForceForegroundWindow(browserWindow);
             await Task.Delay(200, cancellationToken);
-        }
 
-        foreach (int delay in new[] { 50, 100, 200, 350 })
+            foreach (int delay in new[] { 50, 100, 200, 350 })
+            {
+                await Task.Delay(delay, cancellationToken);
+                ForegroundWindowService.TryActivateDestinyWindow();
+            }
+
+            GameMonitorPlacementService.MakeMiniPlayerClickThrough(browserWindow);
+            await Task.Delay(
+                context.GetEffectDuration(Definition),
+                cancellationToken);
+        }
+        finally
         {
-            await Task.Delay(delay, cancellationToken);
             ForegroundWindowService.TryActivateDestinyWindow();
+            if (browserWindow == IntPtr.Zero)
+            {
+                browserWindow = FindNewBrowserWindow(
+                    windowsBeforeLaunch,
+                    launchedProcessId,
+                    requireYouTubeTitle: false);
+            }
+
+            GameMonitorPlacementService.CloseMiniPlayer(browserWindow);
         }
     }
 
@@ -311,7 +335,7 @@ public sealed class RandomYouTubeVideoEffect : RandomYouTubeEffectBase
         Type = ChaosEffectType.Keybind,
         MinimumLevel = ChaosLevel.Chaos,
         Weight = 5,
-        DurationSeconds = 2,
+        DurationSeconds = 14,
         CooldownSeconds = 180,
         CanStack = true
     };
@@ -345,7 +369,7 @@ public sealed class YourRandomYouTubeEffect : RandomYouTubeEffectBase
         Type = ChaosEffectType.Keybind,
         MinimumLevel = ChaosLevel.Normal,
         Weight = 5,
-        DurationSeconds = 2,
+        DurationSeconds = 14,
         CooldownSeconds = 120,
         CanStack = true
     };
