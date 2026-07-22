@@ -4,5 +4,6 @@ public enum ChaosEffectType
 {
     Graphic,
     Keybind,
-    ScreenTransform
+    ScreenTransform,
+    Audio
 }

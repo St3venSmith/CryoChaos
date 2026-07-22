@@ -6,6 +6,9 @@ namespace CryoChaos.Services;
 
 public sealed class KeyboardInputService
 {
+    internal static readonly UIntPtr SyntheticInputMarker =
+        new(0x4352594F); // "CRYO"
+
     private const uint InputMouse = 0;
     private const uint InputKeyboard = 1;
 
@@ -21,7 +24,6 @@ public sealed class KeyboardInputService
     private const uint MouseEventXDown = 0x0080;
     private const uint MouseEventXUp = 0x0100;
     private const uint MouseEventWheel = 0x0800;
-    private const uint MouseEventMoveNoCoalesce = 0x2000;
 
     private const uint XButton1 = 0x0001;
     private const uint XButton2 = 0x0002;
@@ -110,6 +112,56 @@ public sealed class KeyboardInputService
         }
     }
 
+    /// <summary>
+    /// Holds several keyboard or mouse-button bindings at the same time, then
+    /// releases them in reverse order. This supports diagonal movement and
+    /// other chord-style chaos effects.
+    /// </summary>
+    public async Task PressTogetherAsync(
+        IEnumerable<InputBinding> bindings,
+        TimeSpan holdDuration,
+        CancellationToken cancellationToken = default)
+    {
+        InputBinding[] inputs = bindings
+            .DistinctBy(binding =>
+                (binding.Kind, binding.VirtualKey, binding.MouseButton))
+            .ToArray();
+
+        if (inputs.Length == 0)
+        {
+            return;
+        }
+
+        if (inputs.Any(binding =>
+                binding.Kind is not InputBindingKind.Keyboard and
+                not InputBindingKind.MouseButton))
+        {
+            throw new InvalidOperationException(
+                "Simultaneous inputs support keyboard keys and mouse buttons only.");
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        List<InputBinding> pressed = [];
+
+        try
+        {
+            foreach (InputBinding binding in inputs)
+            {
+                SetBindingState(binding, pressed: true);
+                pressed.Add(binding);
+            }
+
+            await Task.Delay(holdDuration, cancellationToken);
+        }
+        finally
+        {
+            for (int index = pressed.Count - 1; index >= 0; index--)
+            {
+                SetBindingState(pressed[index], pressed: false);
+            }
+        }
+    }
+
     public void SendMouseWheel(MouseWheelDirection direction)
     {
         int delta = direction switch
@@ -127,7 +179,8 @@ public sealed class KeyboardInputService
                 Mouse = new MouseInput
                 {
                     MouseData = unchecked((uint)delta),
-                    Flags = MouseEventWheel
+                    Flags = MouseEventWheel,
+                    ExtraInfo = SyntheticInputMarker
                 }
             }
         });
@@ -146,6 +199,41 @@ public sealed class KeyboardInputService
         }
 
         SendMouseMovement(deltaX, deltaY);
+    }
+
+    /// <summary>
+    /// Verifies the standard Windows mouse-injection path outside the game by
+    /// comparing the cursor position before and after a relative SendInput.
+    /// A non-zero observed delta proves Windows accepted the movement.
+    /// </summary>
+    public async Task<MouseMovementDiagnostic> TestMouseMovementAsync(
+        CancellationToken cancellationToken = default)
+    {
+        if (!GetCursorPos(out NativePoint before))
+        {
+            throw new Win32Exception(
+                Marshal.GetLastWin32Error(),
+                "Windows could not read the cursor position.");
+        }
+
+        int screenWidth = GetSystemMetrics(0);
+        int requestedX = before.X > screenWidth - 250 ? -160 : 160;
+
+        MoveMouseRelative(requestedX, 0);
+        await Task.Delay(150, cancellationToken);
+
+        if (!GetCursorPos(out NativePoint after))
+        {
+            throw new Win32Exception(
+                Marshal.GetLastWin32Error(),
+                "Windows could not read the cursor position after SendInput.");
+        }
+
+        return new MouseMovementDiagnostic(
+            requestedX,
+            0,
+            after.X - before.X,
+            after.Y - before.Y);
     }
 
     /// <summary>
@@ -227,6 +315,36 @@ public sealed class KeyboardInputService
         }
     }
 
+    internal static void SendKeyboardState(
+        ushort virtualKey,
+        bool pressed) =>
+        SendKeyboard(virtualKey, keyUp: !pressed);
+
+    internal static void SendMouseButtonState(
+        MouseInputButton button,
+        bool pressed) =>
+        SendMouseButton(button, buttonDown: pressed);
+
+    private static void SetBindingState(
+        InputBinding binding,
+        bool pressed)
+    {
+        switch (binding.Kind)
+        {
+            case InputBindingKind.Keyboard:
+                SendKeyboardState(binding.VirtualKey, pressed);
+                break;
+
+            case InputBindingKind.MouseButton:
+                SendMouseButton(binding.MouseButton, pressed);
+                break;
+
+            default:
+                throw new InvalidOperationException(
+                    $"The input binding '{binding.RawValue}' cannot be held.");
+        }
+    }
+
     private static void SendKeyboard(
         ushort virtualKey,
         bool keyUp)
@@ -239,7 +357,8 @@ public sealed class KeyboardInputService
                 Keyboard = new KeyboardInput
                 {
                     VirtualKey = virtualKey,
-                    Flags = keyUp ? KeyEventKeyUp : 0
+                    Flags = keyUp ? KeyEventKeyUp : 0,
+                    ExtraInfo = SyntheticInputMarker
                 }
             }
         });
@@ -298,7 +417,8 @@ public sealed class KeyboardInputService
                 Mouse = new MouseInput
                 {
                     MouseData = mouseData,
-                    Flags = flags
+                    Flags = flags,
+                    ExtraInfo = SyntheticInputMarker
                 }
             }
         });
@@ -317,13 +437,18 @@ public sealed class KeyboardInputService
                 {
                     Dx = deltaX,
                     Dy = deltaY,
-                    Flags =
-                        MouseEventMove |
-                        MouseEventMoveNoCoalesce
+                    // MOUSEEVENTF_MOVE is the most broadly compatible
+                    // standard relative-movement form. The optional
+                    // NOCOALESCE flag is deliberately avoided for games.
+                    Flags = MouseEventMove,
+                    ExtraInfo = SyntheticInputMarker
                 }
             }
         });
     }
+
+    internal static void SendRelativeMouseMovement(int deltaX, int deltaY) =>
+        SendMouseMovement(deltaX, deltaY);
 
     private static void SendSingle(Input input)
     {
@@ -347,6 +472,13 @@ public sealed class KeyboardInputService
         uint numberOfInputs,
         [MarshalAs(UnmanagedType.LPArray), In] Input[] inputs,
         int sizeOfInputStructure);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetCursorPos(out NativePoint point);
+
+    [DllImport("user32.dll")]
+    private static extern int GetSystemMetrics(int index);
 
     [StructLayout(LayoutKind.Sequential)]
     private struct Input
@@ -385,4 +517,14 @@ public sealed class KeyboardInputService
         public uint Time;
         public UIntPtr ExtraInfo;
     }
+}
+
+public readonly record struct MouseMovementDiagnostic(
+    int RequestedX,
+    int RequestedY,
+    int ObservedX,
+    int ObservedY)
+{
+    public bool WindowsAcceptedMovement =>
+        ObservedX != 0 || ObservedY != 0;
 }

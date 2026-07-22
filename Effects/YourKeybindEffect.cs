@@ -5,8 +5,10 @@ namespace CryoChaos.Effects;
 
 /// <summary>
 /// Template for an effect that triggers one of the player's
-/// detected Destiny 2 keybinds.
+/// detected Destiny 2 keybinds. Rename a copy and remove
+/// ChaosEffectTemplate from the finished effect.
 /// </summary>
+[ChaosEffectTemplate]
 public sealed class YourKeybindEffect :
     KeybindChaosEffectBase
 {

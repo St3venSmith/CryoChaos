@@ -31,7 +31,7 @@ public sealed class RedTintEffect : IChaosEffect
             Definition.Id,
             Color.FromRgb(210, 20, 35),
             opacity,
-            TimeSpan.FromSeconds(Definition.DurationSeconds),
+            context.GetEffectDuration(Definition),
             cancellationToken);
     }
 }
@@ -63,7 +63,7 @@ public sealed class TunnelVisionEffect : IChaosEffect
         return context.Overlay.ShowTunnelVisionAsync(
             Definition.Id,
             openingScale,
-            TimeSpan.FromSeconds(Definition.DurationSeconds),
+            context.GetEffectDuration(Definition),
             cancellationToken);
     }
 }
@@ -92,7 +92,7 @@ public sealed class BlackoutPulseEffect : IChaosEffect
             Definition.Id,
             peakOpacity,
             pulseCount,
-            TimeSpan.FromSeconds(Definition.DurationSeconds),
+            context.GetEffectDuration(Definition),
             cancellationToken);
     }
 }
@@ -116,7 +116,7 @@ public sealed class MovingBlockEffect : IChaosEffect
     {
         return context.Overlay.ShowMovingBlockAsync(
             Definition.Id,
-            TimeSpan.FromSeconds(Definition.DurationSeconds),
+            context.GetEffectDuration(Definition),
             cancellationToken);
     }
 }

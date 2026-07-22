@@ -32,7 +32,7 @@ public sealed class ScreenTransformService : IScreenTransformService
     private readonly object _stateLock = new();
     private readonly DispatcherTimer _zOrderTimer;
 
-    private ScreenTransformWindow? _transformWindow;
+    private CaptureDiagnosticWindow? _transformWindow;
     private bool _disposed;
 
     public ScreenTransformService(OverlayWindow overlay)
@@ -93,34 +93,16 @@ public sealed class ScreenTransformService : IScreenTransformService
             {
                 CloseTransformWindowOnUiThread();
 
-                IntPtr overlayHandle =
-                    new WindowInteropHelper(_overlay).Handle;
-
-                IntPtr[] excludedWindows =
-                    GetCurrentProcessTopLevelWindows()
-                        .Append(overlayHandle)
-                        .Where(handle => handle != IntPtr.Zero)
-                        .Distinct()
-                        .ToArray();
-
-                ScreenTransformWindow window = new(
+                CaptureDiagnosticWindow window = new(
                     destinyWindow,
-                    mode,
-                    excludedWindows);
+                    mode);
 
                 lock (_stateLock)
                 {
                     _transformWindow = window;
                 }
 
-                window.ContentRendered +=
-                    TransformWindow_ContentRendered;
-
-                window.Closed +=
-                    TransformWindow_Closed;
-
                 window.Show();
-
                 EnsureOverlayAboveTransform();
                 _zOrderTimer.Start();
             });
@@ -152,34 +134,11 @@ public sealed class ScreenTransformService : IScreenTransformService
             CloseTransformWindowOnUiThread);
     }
 
-    private void TransformWindow_ContentRendered(
-        object? sender,
-        EventArgs e)
-    {
-        EnsureOverlayAboveTransform();
-    }
-
-    private void TransformWindow_Closed(
-        object? sender,
-        EventArgs e)
-    {
-        if (sender is ScreenTransformWindow window)
-        {
-            window.ContentRendered -=
-                TransformWindow_ContentRendered;
-
-            window.Closed -=
-                TransformWindow_Closed;
-        }
-
-        _zOrderTimer.Stop();
-    }
-
     private void CloseTransformWindowOnUiThread()
     {
         _zOrderTimer.Stop();
 
-        ScreenTransformWindow? window;
+        CaptureDiagnosticWindow? window;
 
         lock (_stateLock)
         {
@@ -192,12 +151,6 @@ public sealed class ScreenTransformService : IScreenTransformService
             return;
         }
 
-        window.ContentRendered -=
-            TransformWindow_ContentRendered;
-
-        window.Closed -=
-            TransformWindow_Closed;
-
         window.Close();
     }
 
@@ -209,7 +162,7 @@ public sealed class ScreenTransformService : IScreenTransformService
             return;
         }
 
-        ScreenTransformWindow? transformWindow;
+        CaptureDiagnosticWindow? transformWindow;
 
         lock (_stateLock)
         {
@@ -222,8 +175,7 @@ public sealed class ScreenTransformService : IScreenTransformService
             return;
         }
 
-        IntPtr transformHandle =
-            transformWindow.NativeHandle;
+        IntPtr transformHandle = transformWindow.NativeHandle;
 
         IntPtr overlayHandle =
             new WindowInteropHelper(_overlay).Handle;
@@ -262,32 +214,6 @@ public sealed class ScreenTransformService : IScreenTransformService
             flags);
     }
 
-    private static IReadOnlyList<IntPtr>
-        GetCurrentProcessTopLevelWindows()
-    {
-        uint currentProcessId =
-            (uint)Environment.ProcessId;
-
-        List<IntPtr> windows = [];
-
-        EnumWindows((window, _) =>
-        {
-            GetWindowThreadProcessId(
-                window,
-                out uint processId);
-
-            if (processId == currentProcessId &&
-                IsWindowVisible(window))
-            {
-                windows.Add(window);
-            }
-
-            return true;
-        }, IntPtr.Zero);
-
-        return windows;
-    }
-
     public void Dispose()
     {
         if (_disposed)
@@ -314,26 +240,6 @@ public sealed class ScreenTransformService : IScreenTransformService
 
         _effectGate.Dispose();
     }
-
-    private delegate bool EnumWindowsCallback(
-        IntPtr window,
-        IntPtr parameter);
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool EnumWindows(
-        EnumWindowsCallback callback,
-        IntPtr parameter);
-
-    [DllImport("user32.dll")]
-    private static extern uint GetWindowThreadProcessId(
-        IntPtr window,
-        out uint processId);
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool IsWindowVisible(
-        IntPtr window);
 
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]

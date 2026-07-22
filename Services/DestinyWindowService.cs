@@ -78,9 +78,7 @@ public static class DestinyWindowService
 
     internal static NativeRect GetMonitorBounds(IntPtr window)
     {
-        IntPtr monitor = MonitorFromWindow(
-            window,
-            MonitorDefaultToNearest);
+        IntPtr monitor = GetMonitorHandle(window);
 
         if (monitor == IntPtr.Zero)
         {
@@ -100,6 +98,21 @@ public static class DestinyWindowService
         }
 
         return monitorInfo.Monitor;
+    }
+
+    internal static IntPtr GetMonitorHandle(IntPtr window)
+    {
+        IntPtr monitor = MonitorFromWindow(
+            window,
+            MonitorDefaultToNearest);
+
+        if (monitor == IntPtr.Zero)
+        {
+            throw new InvalidOperationException(
+                "The monitor containing Destiny 2 could not be determined.");
+        }
+
+        return monitor;
     }
 
     [DllImport("user32.dll")]

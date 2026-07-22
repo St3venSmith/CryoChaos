@@ -3,12 +3,15 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:models="clr-namespace:CryoChaos.Models"
         Title="CryoChaos"
-        Width="1080"
-        Height="760"
-        MinWidth="900"
-        MinHeight="650"
+        Background="{StaticResource PanelBrush}"
+        Foreground="{StaticResource TextBrush}"
+        FontFamily="Segoe UI Variable Text, Segoe UI"
+        Width="1160"
+        Height="820"
+        MinWidth="920"
+        MinHeight="680"
         WindowStartupLocation="CenterScreen">
-    <Grid Margin="18">
+    <Grid Margin="24">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -16,124 +19,213 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <StackPanel Grid.Row="0" Margin="0,0,0,14">
-            <TextBlock Text="CryoChaos" FontSize="28" FontWeight="Bold" />
-            <TextBlock Text="External Destiny 2 chaos controller — graphic and keybind effects"
-                       Foreground="{StaticResource MutedBrush}"
-                       Margin="0,4,0,0" />
-        </StackPanel>
+        <Grid Grid.Row="0" Margin="0,0,0,18">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <Border Grid.Column="0"
+                    Width="52"
+                    Height="52"
+                    Background="{StaticResource BrandGradient}"
+                    CornerRadius="14"
+                    Margin="0,0,14,0">
+                <TextBlock Text="C"
+                           FontSize="25"
+                           FontWeight="Bold"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center" />
+            </Border>
+
+            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                <TextBlock Text="CryoChaos" FontSize="27" FontWeight="Bold" />
+                <TextBlock Text="Live capture effects and external input chaos for Destiny 2"
+                           Foreground="{StaticResource MutedBrush}"
+                           Margin="0,3,0,0" />
+            </StackPanel>
+
+            <Border Grid.Column="2"
+                    Background="{StaticResource AccentSoftBrush}"
+                    BorderBrush="#51428A"
+                    BorderThickness="1"
+                    CornerRadius="20"
+                    Padding="14,7"
+                    VerticalAlignment="Center">
+                <StackPanel Orientation="Horizontal">
+                    <Ellipse Width="8" Height="8" Fill="{StaticResource AccentBrush}" Margin="0,0,8,0" />
+                    <TextBlock x:Name="StatusTextBlock"
+                               Text="Stopped"
+                               Foreground="White"
+                               FontWeight="SemiBold"
+                               VerticalAlignment="Center" />
+                </StackPanel>
+            </Border>
+        </Grid>
 
         <Border Grid.Row="1"
-                Background="{StaticResource CardBrush}"
-                CornerRadius="10"
-                Padding="14"
-                Margin="0,0,0,14">
+                Style="{StaticResource CardStyle}"
+                Margin="0,0,0,16">
             <Grid>
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="155" />
+                    <ColumnDefinition Width="180" />
                     <ColumnDefinition Width="22" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="80" />
-                    <ColumnDefinition Width="16" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="80" />
+                    <ColumnDefinition Width="150" />
                     <ColumnDefinition Width="18" />
-                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="150" />
+                    <ColumnDefinition Width="24" />
+                    <ColumnDefinition Width="135" />
+                    <ColumnDefinition Width="18" />
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
 
-                <TextBlock Grid.Column="0" Text="Mode" VerticalAlignment="Center" Margin="0,0,8,0" />
-                <ComboBox x:Name="ModeComboBox"
-                          Grid.Column="1" />
+                <StackPanel Grid.Column="0">
+                    <TextBlock Text="CHAOS LEVEL"
+                               Foreground="#DCE2F2"
+                               FontSize="12"
+                               FontWeight="Bold"
+                               Margin="0,0,0,6" />
+                    <ComboBox x:Name="ModeComboBox" />
+                </StackPanel>
 
-                <TextBlock Grid.Column="3" Text="Minimum interval" VerticalAlignment="Center" Margin="0,0,8,0" />
-                <TextBox x:Name="MinimumIntervalTextBox" Grid.Column="4" Text="35" />
+                <StackPanel Grid.Column="2">
+                    <TextBlock Text="MINIMUM DELAY"
+                               Foreground="#DCE2F2"
+                               FontSize="12"
+                               FontWeight="Bold"
+                               Margin="0,0,0,6" />
+                    <TextBox x:Name="MinimumIntervalTextBox" Text="35" />
+                </StackPanel>
 
-                <TextBlock Grid.Column="6" Text="Maximum interval" VerticalAlignment="Center" Margin="0,0,8,0" />
-                <TextBox x:Name="MaximumIntervalTextBox" Grid.Column="7" Text="70" />
+                <StackPanel Grid.Column="4">
+                    <TextBlock Text="MAXIMUM DELAY"
+                               Foreground="#DCE2F2"
+                               FontSize="12"
+                               FontWeight="Bold"
+                               Margin="0,0,0,6" />
+                    <TextBox x:Name="MaximumIntervalTextBox" Text="70" />
+                </StackPanel>
 
-                <CheckBox x:Name="RequireForegroundCheckBox"
-                          Grid.Column="9"
-                          Content="Only send keybinds while Destiny 2 is focused"
-                          IsChecked="True"
-                          VerticalAlignment="Center" />
+                <StackPanel Grid.Column="6">
+                    <TextBlock Text="MAX EFFECTS"
+                               Foreground="#DCE2F2"
+                               FontSize="12"
+                               FontWeight="Bold"
+                               Margin="0,0,0,6" />
+                    <TextBox x:Name="MaximumEffectsTextBox" Text="3"
+                             ToolTip="Maximum simultaneous effects: 1–50" />
+                </StackPanel>
+
+                <Border Grid.Column="8"
+                        Background="#10141E"
+                        BorderBrush="{StaticResource BorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Padding="12"
+                        VerticalAlignment="Bottom">
+                    <CheckBox x:Name="RequireForegroundCheckBox"
+                              Content="Only send keybinds while Destiny 2 is focused"
+                              Foreground="{StaticResource TextBrush}"
+                              IsChecked="True"
+                              VerticalAlignment="Center" />
+                </Border>
             </Grid>
         </Border>
 
-        <TabControl Grid.Row="2" Background="Transparent" BorderBrush="#343A49">
-            <TabItem Header="Effects">
-                <DataGrid x:Name="EffectsGrid"
-                          ItemsSource="{Binding Effects}"
-                          Margin="8"
-                          IsReadOnly="False">
-                    <DataGrid.Columns>
-                        <DataGridCheckBoxColumn Header="Enabled" Binding="{Binding Enabled, Mode=TwoWay}" Width="75" />
-                        <DataGridTextColumn Header="Effect" Binding="{Binding Name}" IsReadOnly="True" Width="170" />
-                        <DataGridTextColumn Header="Type" Binding="{Binding Type}" IsReadOnly="True" Width="90" />
-                        <DataGridTextColumn Header="Minimum level" Binding="{Binding MinimumLevel}" IsReadOnly="True" Width="110" />
-                        <DataGridTextColumn Header="Duration" Binding="{Binding DurationSeconds}" IsReadOnly="True" Width="80" />
-                        <DataGridTextColumn Header="Weight" Binding="{Binding Weight}" IsReadOnly="True" Width="70" />
-                        <DataGridTextColumn Header="Description" Binding="{Binding Description}" IsReadOnly="True" Width="*" />
-                    </DataGrid.Columns>
-                </DataGrid>
-            </TabItem>
+        <Border Grid.Row="2" Style="{StaticResource CardStyle}" Padding="8">
+            <TabControl>
+                <TabItem Header="Effects">
+                    <Grid Margin="8">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
 
-            <TabItem Header="Detected keybinds">
-                <Grid Margin="8">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="*" />
-                    </Grid.RowDefinitions>
+                        <Grid Grid.Row="0" Margin="0,0,0,10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel>
+                                <TextBlock Text="Effect library" FontSize="16" FontWeight="SemiBold" />
+                                <TextBlock Text="Choose which effects can be selected by the chaos engine."
+                                           Foreground="{StaticResource MutedBrush}"
+                                           Margin="0,3,0,0" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                <Button Content="Turn all on"
+                                        Click="EnableAllEffectsButton_Click" />
+                                <Button Content="Turn all off"
+                                        Click="DisableAllEffectsButton_Click"
+                                        Style="{StaticResource DangerButtonStyle}" />
+                            </StackPanel>
+                        </Grid>
 
-                    <TextBlock Grid.Row="0"
-                               Text="Bindings are read from Destiny's cvars.xml. The file is never modified."
-                               Foreground="{StaticResource MutedBrush}"
-                               Margin="0,0,0,8" />
+                        <DataGrid x:Name="EffectsGrid"
+                                  Grid.Row="1"
+                                  ItemsSource="{Binding Effects}"
+                                  IsReadOnly="False">
+                            <DataGrid.Columns>
+                                <DataGridCheckBoxColumn Header="ON" Binding="{Binding Enabled, Mode=TwoWay}" Width="58" />
+                                <DataGridTextColumn Header="EFFECT" Binding="{Binding Name}" IsReadOnly="True" Width="170" />
+                                <DataGridTextColumn Header="TYPE" Binding="{Binding Type}" IsReadOnly="True" Width="105" />
+                                <DataGridTextColumn Header="LEVEL" Binding="{Binding MinimumLevel}" IsReadOnly="True" Width="90" />
+                                <DataGridTextColumn Header="TIME" Binding="{Binding DurationSeconds}" IsReadOnly="True" Width="68" />
+                                <DataGridTextColumn Header="WEIGHT" Binding="{Binding Weight}" IsReadOnly="True" Width="75" />
+                                <DataGridTextColumn Header="DESCRIPTION" Binding="{Binding Description}" IsReadOnly="True" Width="*" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </Grid>
+                </TabItem>
 
-                    <DataGrid Grid.Row="1"
-                              ItemsSource="{Binding DetectedBindings}"
-                              IsReadOnly="True">
-                        <DataGrid.Columns>
-                            <DataGridTextColumn Header="Action" Binding="{Binding Action}" Width="*" />
-                            <DataGridTextColumn Header="Primary" Binding="{Binding PrimaryDisplay}" Width="180" />
-                            <DataGridTextColumn Header="Secondary" Binding="{Binding SecondaryDisplay}" Width="180" />
-                        </DataGrid.Columns>
-                    </DataGrid>
-                </Grid>
-            </TabItem>
+                <TabItem Header="Detected keybinds">
+                    <Grid Margin="8">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <TextBlock Grid.Row="0"
+                                   Text="Read-only bindings loaded from Destiny's cvars.xml"
+                                   Foreground="{StaticResource MutedBrush}"
+                                   Margin="0,0,0,10" />
+                        <DataGrid Grid.Row="1"
+                                  ItemsSource="{Binding DetectedBindings}"
+                                  IsReadOnly="True">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="ACTION" Binding="{Binding Action}" Width="*" />
+                                <DataGridTextColumn Header="PRIMARY" Binding="{Binding PrimaryDisplay}" Width="210" />
+                                <DataGridTextColumn Header="SECONDARY" Binding="{Binding SecondaryDisplay}" Width="210" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </Grid>
+                </TabItem>
 
-            <TabItem Header="Event log">
-                <ListBox x:Name="EventLogListBox"
-                         Margin="8"
-                         Background="#141821"
-                         Foreground="White"
-                         BorderBrush="#343A49" />
-            </TabItem>
-        </TabControl>
+                <TabItem Header="Event log">
+                    <ListBox x:Name="EventLogListBox"
+                             Margin="8"
+                             Padding="8"
+                             Background="#10141E"
+                             Foreground="White"
+                             BorderBrush="{StaticResource BorderBrush}" />
+                </TabItem>
+            </TabControl>
+        </Border>
 
-        <Grid Grid.Row="3" Margin="0,14,0,0">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="*" />
-            </Grid.ColumnDefinitions>
-
-            <Button x:Name="StartButton" Grid.Column="0" Content="Start" Click="StartButton_Click" />
-            <Button x:Name="StopButton" Grid.Column="1" Content="Stop" Click="StopButton_Click" Background="#A43A4B" />
-            <Button x:Name="TriggerNowButton" Grid.Column="2" Content="Trigger now" Click="TriggerNowButton_Click" />
-            <Button x:Name="RefreshBindingsButton" Grid.Column="3" Content="Refresh bindings" Click="RefreshBindingsButton_Click" Background="#3F6CB5" />
-            <Button x:Name="OpenBindingsFolderButton" Grid.Column="4" Content="Open bindings folder" Click="OpenBindingsFolderButton_Click" Background="#3F6CB5" />
-
-            <TextBlock x:Name="StatusTextBlock"
-                       Grid.Column="5"
-                       Text="Stopped"
-                       HorizontalAlignment="Right"
-                       VerticalAlignment="Center"
-                       Foreground="{StaticResource MutedBrush}" />
-        </Grid>
+        <Border Grid.Row="3"
+                Style="{StaticResource CardStyle}"
+                Padding="12,12,4,4"
+                Margin="0,16,0,0">
+            <WrapPanel>
+                <Button x:Name="StartButton" Content="Start chaos" Click="StartButton_Click" />
+                <Button x:Name="StopButton" Content="Stop" Click="StopButton_Click" Style="{StaticResource DangerButtonStyle}" />
+                <Button x:Name="TriggerNowButton" Content="Trigger now" Click="TriggerNowButton_Click" />
+                <Button x:Name="RefreshBindingsButton" Content="Refresh bindings" Click="RefreshBindingsButton_Click" Style="{StaticResource SecondaryButtonStyle}" />
+                <Button x:Name="OpenBindingsFolderButton" Content="Bindings folder" Click="OpenBindingsFolderButton_Click" Style="{StaticResource SecondaryButtonStyle}" />
+                <Button x:Name="TestGameCaptureButton" Content="Test game capture" Click="TestGameCaptureButton_Click" Style="{StaticResource SecondaryButtonStyle}" />
+                <Button x:Name="TestMonitorCaptureButton" Content="Test monitor capture" Click="TestMonitorCaptureButton_Click" Style="{StaticResource SecondaryButtonStyle}" />
+                <Button x:Name="TestMouseMoveButton" Content="Test mouse move" Click="TestMouseMoveButton_Click" Style="{StaticResource SecondaryButtonStyle}" />
+            </WrapPanel>
+        </Border>
     </Grid>
 </Window>

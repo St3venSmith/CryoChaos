@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0-windows</TargetFramework>
+    <TargetFramework>net8.0-windows10.0.26100.0</TargetFramework>
     <UseWPF>true</UseWPF>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -9,5 +9,21 @@
     <AssemblyName>CryoChaos</AssemblyName>
     <PlatformTarget>x64</PlatformTarget>
     <Prefer32Bit>false</Prefer32Bit>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <WindowsPackageType>None</WindowsPackageType>
   </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="NAudio" Version="2.2.1" />
+    <PackageReference Include="Vortice.Direct3D11" Version="3.8.3" />
+    <PackageReference Include="Vortice.DXGI" Version="3.8.3" />
+    <PackageReference Include="Vortice.D3DCompiler" Version="3.8.3" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="Shaders\ScreenEffects.hlsl"
+             CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Sounds\**\*.wav"
+             CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Videos\**\*.*"
+             CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

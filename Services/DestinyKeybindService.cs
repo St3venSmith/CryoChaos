@@ -93,15 +93,20 @@ public sealed class DestinyKeybindService : IDisposable
             return [];
         }
 
-        DestinyBinding? action = FindAction(aliases);
-        if (action is null)
+        IReadOnlyList<DestinyBinding> actions = FindActions(aliases);
+        if (actions.Count == 0)
         {
             return [];
         }
 
         List<InputBinding> results = [];
-        AddIfUsable(action.Primary);
-        AddIfUsable(action.Secondary);
+
+        foreach (DestinyBinding action in actions)
+        {
+            AddIfUsable(action.Primary);
+            AddIfUsable(action.Secondary);
+        }
+
         return results;
 
         void AddIfUsable(InputBinding? candidate)
@@ -129,49 +134,40 @@ public sealed class DestinyKeybindService : IDisposable
         params string[] aliases) =>
         ResolveActionBindings(aliases).FirstOrDefault();
 
-    private DestinyBinding? FindAction(IReadOnlyList<string> aliases)
+    private IReadOnlyList<DestinyBinding> FindActions(
+        IReadOnlyList<string> aliases)
     {
         lock (_bindingsLock)
         {
-            foreach (string alias in aliases)
-            {
-                if (_bindings.TryGetValue(
-                        alias,
-                        out DestinyBinding? exact))
+            string[] normalizedAliases = aliases
+                .Select(NormalizeAction)
+                .Where(alias => alias.Length > 0)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            // Collect every exact action plus cvars variants that add a
+            // prefix or suffix. Ignore fuzzy matching for very short aliases
+            // so a generic alias such as "use" cannot disable unrelated
+            // actions; an exact short alias is still accepted.
+            return _bindings.Values
+                .Where(binding =>
                 {
-                    return exact;
-                }
-            }
-
-            foreach (DestinyBinding binding in _bindings.Values)
-            {
-                string normalizedAction = NormalizeAction(binding.Action);
-
-                foreach (string alias in aliases)
-                {
-                    string normalizedAlias = NormalizeAction(alias);
-                    if (normalizedAlias.Length == 0)
-                    {
-                        continue;
-                    }
-
-                    if (normalizedAction.Equals(
-                            normalizedAlias,
-                            StringComparison.OrdinalIgnoreCase) ||
-                        normalizedAction.Contains(
-                            normalizedAlias,
-                            StringComparison.OrdinalIgnoreCase) ||
-                        normalizedAlias.Contains(
-                            normalizedAction,
-                            StringComparison.OrdinalIgnoreCase))
-                    {
-                        return binding;
-                    }
-                }
-            }
+                    string normalizedAction = NormalizeAction(binding.Action);
+                    return normalizedAliases
+                        .Any(alias =>
+                            normalizedAction.Equals(
+                                alias,
+                                StringComparison.OrdinalIgnoreCase) ||
+                            alias.Length >= 5 &&
+                            (normalizedAction.Contains(
+                                 alias,
+                                 StringComparison.OrdinalIgnoreCase) ||
+                             alias.Contains(
+                                 normalizedAction,
+                                 StringComparison.OrdinalIgnoreCase)));
+                })
+                .ToArray();
         }
-
-        return null;
     }
 
     private static bool BindingsAreEquivalent(

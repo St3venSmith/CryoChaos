@@ -5,6 +5,22 @@ namespace CryoChaos.Services;
 
 public static class ForegroundWindowService
 {
+    public static bool IsWindowForeground(IntPtr window) =>
+        window != IntPtr.Zero && GetForegroundWindow() == window;
+
+    public static bool TryActivateDestinyWindow()
+    {
+        IntPtr window = DestinyWindowService.FindDestinyWindow();
+        if (!DestinyWindowService.IsUsableWindow(window))
+        {
+            return false;
+        }
+
+        // Foreground activation completes asynchronously. The caller waits
+        // briefly and verifies the result before sending input.
+        return SetForegroundWindow(window);
+    }
+
     public static bool IsDestinyForeground()
     {
         IntPtr window = GetForegroundWindow();
@@ -28,6 +44,10 @@ public static class ForegroundWindowService
 
     [DllImport("user32.dll")]
     private static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetForegroundWindow(IntPtr window);
 
     [DllImport("user32.dll")]
     private static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);

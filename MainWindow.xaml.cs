@@ -13,6 +13,12 @@ public partial class MainWindow : Window
     private readonly OverlayWindow _overlay;
     private readonly DestinyKeybindService _keybinds;
     private readonly KeyboardInputService _input;
+    private readonly KeyboardRemapService _inputRemapper;
+    private readonly RawMouseEffectService _rawMouseEffects;
+    private readonly SoundEffectService _soundEffects;
+    private readonly GameAudioEffectService _gameAudioEffects;
+    private readonly VideoOverlayService _videoOverlay;
+    private readonly QteService _qte;
     private readonly ScreenTransformService _screenTransform;
     private readonly ChaosEngine _engine;
     private readonly SettingsService _settingsService;
@@ -28,11 +34,23 @@ public partial class MainWindow : Window
         _overlay = new OverlayWindow();
         _keybinds = new DestinyKeybindService();
         _input = new KeyboardInputService();
+        _inputRemapper = new KeyboardRemapService(Dispatcher);
+        _rawMouseEffects = new RawMouseEffectService(this);
+        _soundEffects = new SoundEffectService();
+        _gameAudioEffects = new GameAudioEffectService();
+        _videoOverlay = new VideoOverlayService(Dispatcher);
+        _qte = new QteService(Dispatcher);
         _screenTransform = new ScreenTransformService(_overlay);
         _engine = new ChaosEngine(
             _overlay,
             _keybinds,
             _input,
+            _inputRemapper,
+            _rawMouseEffects,
+            _soundEffects,
+            _gameAudioEffects,
+            _videoOverlay,
+            _qte,
             _screenTransform);
 
         Effects = _engine.Effects;
@@ -44,6 +62,12 @@ public partial class MainWindow : Window
         MinimumIntervalTextBox.Text = _settings.MinimumIntervalSeconds.ToString();
         MaximumIntervalTextBox.Text = _settings.MaximumIntervalSeconds.ToString();
         RequireForegroundCheckBox.IsChecked = _settings.RequireDestinyForeground;
+        int maximumActiveEffects = Math.Clamp(
+            _settings.MaximumActiveEffects,
+            1,
+            ChaosEngine.MaximumSupportedActiveEffects);
+        MaximumEffectsTextBox.Text = maximumActiveEffects.ToString();
+        _engine.SetMaximumActiveEffects(maximumActiveEffects);
 
         foreach (ChaosEffectDefinition effect in Effects)
         {
@@ -78,6 +102,7 @@ public partial class MainWindow : Window
             ChaosLevel level = GetSelectedLevel();
             int minimum = ParsePositiveInteger(MinimumIntervalTextBox.Text, "Minimum interval");
             int maximum = ParsePositiveInteger(MaximumIntervalTextBox.Text, "Maximum interval");
+            _engine.SetMaximumActiveEffects(ParseMaximumEffects());
 
             _engine.Start(
                 level,
@@ -101,10 +126,29 @@ public partial class MainWindow : Window
         AddLog("Engine stopped.");
     }
 
+    private void EnableAllEffectsButton_Click(object sender, RoutedEventArgs e) =>
+        SetAllEffectsEnabled(true);
+
+    private void DisableAllEffectsButton_Click(object sender, RoutedEventArgs e) =>
+        SetAllEffectsEnabled(false);
+
+    private void SetAllEffectsEnabled(bool enabled)
+    {
+        foreach (ChaosEffectDefinition effect in Effects)
+        {
+            effect.Enabled = enabled;
+        }
+
+        EffectsGrid.Items.Refresh();
+        SaveSettings();
+        AddLog(enabled ? "All effects enabled." : "All effects disabled.");
+    }
+
     private async void TriggerNowButton_Click(object sender, RoutedEventArgs e)
     {
         try
         {
+            _engine.SetMaximumActiveEffects(ParseMaximumEffects());
             await _engine.TriggerRandomNowAsync(
                 GetSelectedLevel(),
                 RequireForegroundCheckBox.IsChecked == true);
@@ -141,6 +185,72 @@ public partial class MainWindow : Window
         });
     }
 
+    private void TestGameCaptureButton_Click(object sender, RoutedEventArgs e) =>
+        OpenCaptureDiagnostic(captureMonitor: false);
+
+    private void TestMonitorCaptureButton_Click(object sender, RoutedEventArgs e) =>
+        OpenCaptureDiagnostic(captureMonitor: true);
+
+    private async void TestMouseMoveButton_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            MouseMovementDiagnostic result =
+                await _input.TestMouseMovementAsync();
+
+            string message = result.WindowsAcceptedMovement
+                ? $"Windows mouse test passed. Requested ({result.RequestedX}, {result.RequestedY}); observed ({result.ObservedX}, {result.ObservedY})."
+                : "Windows mouse test failed: SendInput returned success, but the cursor position did not change.";
+
+            AddLog(message);
+            MessageBox.Show(
+                this,
+                message,
+                "Mouse movement diagnostic",
+                MessageBoxButton.OK,
+                result.WindowsAcceptedMovement
+                    ? MessageBoxImage.Information
+                    : MessageBoxImage.Warning);
+        }
+        catch (Exception ex)
+        {
+            AddLog($"Mouse movement diagnostic failed: {ex.Message}");
+            MessageBox.Show(
+                this,
+                ex.Message,
+                "Mouse movement diagnostic failed",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
+    }
+
+    private void OpenCaptureDiagnostic(bool captureMonitor)
+    {
+        IntPtr destinyWindow = DestinyWindowService.FindDestinyWindow();
+        if (!DestinyWindowService.IsUsableWindow(destinyWindow))
+        {
+            MessageBox.Show(
+                this,
+                "Start Destiny 2 and make sure it is not minimized, then run the capture test again.",
+                "Destiny 2 not found",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            return;
+        }
+
+        CaptureDiagnosticWindow diagnostic = new(
+            destinyWindow,
+            captureMonitor)
+        {
+            Owner = this
+        };
+
+        diagnostic.Show();
+        AddLog(captureMonitor
+            ? "Opened monitor-capture diagnostic."
+            : "Opened Destiny-window capture diagnostic.");
+    }
+
     private ChaosLevel GetSelectedLevel() =>
         ModeComboBox.SelectedItem is ChaosLevel level ? level : ChaosLevel.Normal;
 
@@ -149,6 +259,18 @@ public partial class MainWindow : Window
         if (!int.TryParse(text, out int value) || value < 1)
         {
             throw new InvalidOperationException($"{fieldName} must be a whole number greater than zero.");
+        }
+
+        return value;
+    }
+
+    private int ParseMaximumEffects()
+    {
+        int value = ParsePositiveInteger(MaximumEffectsTextBox.Text, "Maximum effects");
+        if (value > ChaosEngine.MaximumSupportedActiveEffects)
+        {
+            throw new InvalidOperationException(
+                $"Maximum effects must be between 1 and {ChaosEngine.MaximumSupportedActiveEffects}.");
         }
 
         return value;
@@ -174,6 +296,9 @@ public partial class MainWindow : Window
             MinimumIntervalSeconds = int.TryParse(MinimumIntervalTextBox.Text, out int minimum) ? minimum : 35,
             MaximumIntervalSeconds = int.TryParse(MaximumIntervalTextBox.Text, out int maximum) ? maximum : 70,
             RequireDestinyForeground = RequireForegroundCheckBox.IsChecked == true,
+            MaximumActiveEffects = int.TryParse(MaximumEffectsTextBox.Text, out int maxEffects)
+                ? Math.Clamp(maxEffects, 1, ChaosEngine.MaximumSupportedActiveEffects)
+                : 3,
             DisabledEffectIds = Effects
                 .Where(effect => !effect.Enabled)
                 .Select(effect => effect.Id)
@@ -195,6 +320,12 @@ public partial class MainWindow : Window
         SaveSettings();
         _engine.Dispose();
         _screenTransform.Dispose();
+        _rawMouseEffects.Dispose();
+        _qte.Dispose();
+        _videoOverlay.Dispose();
+        _soundEffects.Dispose();
+        _gameAudioEffects.Dispose();
+        _inputRemapper.Dispose();
         _keybinds.Dispose();
         _overlay.Close();
     }

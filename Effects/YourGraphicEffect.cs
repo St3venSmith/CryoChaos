@@ -3,6 +3,7 @@ using CryoChaos.Models;
 
 namespace CryoChaos.Effects;
 
+[ChaosEffectTemplate]
 public sealed class YourGraphicEffect : IChaosEffect
 {
     public ChaosEffectDefinition Definition { get; } = new()
@@ -57,8 +58,7 @@ public sealed class YourGraphicEffect : IChaosEffect
                 TimeSpan.FromSeconds(9),
 
             _ =>
-                TimeSpan.FromSeconds(
-                    Definition.DurationSeconds)
+                context.GetEffectDuration(Definition)
         };
 
         return context.Overlay.ShowTintAsync(
