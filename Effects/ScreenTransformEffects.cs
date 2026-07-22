@@ -24,7 +24,7 @@ public abstract class ScreenTransformEffectBase : IChaosEffect
         // check made the HUD announce an effect while silently skipping it.
         return context.ScreenTransform.ShowAsync(
             TransformMode,
-            context.ScaleDuration(GetDuration(context.SelectedLevel)),
+            context.ScaleEffectDuration(GetDuration(context.SelectedLevel)),
             cancellationToken);
     }
 }
