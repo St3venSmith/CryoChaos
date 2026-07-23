@@ -46,6 +46,7 @@ public abstract class RandomYouTubeEffectBase : IChaosEffect
         // Keep Destiny active while the new tab loads. A YouTube window title
         // is the best external signal available without browser automation.
         IntPtr browserWindow = IntPtr.Zero;
+        IDisposable? browserVolumeLease = null;
         try
         {
             for (int index = 0; index < 32; index++)
@@ -92,6 +93,8 @@ public abstract class RandomYouTubeEffectBase : IChaosEffect
             while (DateTimeOffset.UtcNow < closeAt)
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                browserVolumeLease ??=
+                    context.GameAudioEffects.TryBoostApplicationVolume(browserPath);
                 GameMonitorPlacementService.MakeMiniPlayerClickThrough(browserWindow);
                 TimeSpan remaining = closeAt - DateTimeOffset.UtcNow;
                 if (remaining <= TimeSpan.Zero)
@@ -108,6 +111,7 @@ public abstract class RandomYouTubeEffectBase : IChaosEffect
         }
         finally
         {
+            browserVolumeLease?.Dispose();
             ForegroundWindowService.TryActivateDestinyWindow();
             if (browserWindow == IntPtr.Zero)
             {
