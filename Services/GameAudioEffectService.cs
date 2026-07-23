@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.IO;
 using System.Runtime.InteropServices;
 using Microsoft.Win32.SafeHandles;
 using NAudio.CoreAudioApi;
@@ -28,6 +29,28 @@ public sealed class GameAudioEffectService : IDisposable
     private const float DryVolume = 0.22f;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private bool _disposed;
+
+    public IDisposable? TryBoostApplicationVolume(string executablePath)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        string processName = Path.GetFileNameWithoutExtension(executablePath);
+        if (string.IsNullOrWhiteSpace(processName))
+        {
+            return null;
+        }
+
+        int[] processIds = Process.GetProcessesByName(processName)
+            .Select(process =>
+            {
+                using (process)
+                {
+                    return process.Id;
+                }
+            })
+            .ToArray();
+
+        return AudioSessionVolumeLease.TrySet(processIds, 1.0f);
+    }
 
     public async Task PlayAsync(
         GameAudioEffectMode mode,
@@ -150,6 +173,49 @@ public sealed class GameAudioEffectService : IDisposable
             }
 
             return new AudioSessionVolumeLease(changed, devices, endpoint);
+        }
+
+        public static AudioSessionVolumeLease? TrySet(
+            IReadOnlyCollection<int> processIds,
+            float volume)
+        {
+            if (processIds.Count == 0)
+            {
+                return null;
+            }
+
+            HashSet<uint> targets = processIds
+                .Select(id => unchecked((uint)id))
+                .ToHashSet();
+            List<(SimpleAudioVolume, float)> changed = [];
+            MMDeviceEnumerator devices = new();
+            MMDevice endpoint = devices.GetDefaultAudioEndpoint(
+                DataFlow.Render,
+                Role.Multimedia);
+
+            SessionCollection sessions = endpoint.AudioSessionManager.Sessions;
+            for (int index = 0; index < sessions.Count; index++)
+            {
+                AudioSessionControl session = sessions[index];
+                if (!targets.Contains(session.GetProcessID))
+                {
+                    continue;
+                }
+
+                SimpleAudioVolume sessionVolume = session.SimpleAudioVolume;
+                float original = sessionVolume.Volume;
+                changed.Add((sessionVolume, original));
+                sessionVolume.Volume = Math.Clamp(volume, 0, 1);
+            }
+
+            if (changed.Count > 0)
+            {
+                return new AudioSessionVolumeLease(changed, devices, endpoint);
+            }
+
+            endpoint.Dispose();
+            devices.Dispose();
+            return null;
         }
 
         public void Dispose()
