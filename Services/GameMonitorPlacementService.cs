@@ -20,6 +20,10 @@ internal static class GameMonitorPlacementService
     private const int WsExNoActivate = 0x08000000;
     private const uint LwaAlpha = 0x00000002;
     private const uint WmClose = 0x0010;
+    private const uint WmMouseMove = 0x0200;
+    private const uint WmLeftButtonDown = 0x0201;
+    private const uint WmLeftButtonUp = 0x0202;
+    private const int MkLeftButton = 0x0001;
 
     public static void CenterOnGameMonitor(Window window, bool activate)
     {
@@ -76,6 +80,21 @@ internal static class GameMonitorPlacementService
             SwpNoActivate | SwpFrameChanged);
     }
 
+    public static void FocusMiniPlayerVideo(IntPtr window)
+    {
+        if (window == IntPtr.Zero || !GetClientRect(window, out NativeRect rect))
+        {
+            return;
+        }
+
+        int x = Math.Max(1, rect.Width / 2);
+        int y = Math.Max(1, rect.Height / 2);
+        IntPtr coordinates = new((y << 16) | (x & 0xFFFF));
+        _ = PostMessage(window, WmMouseMove, IntPtr.Zero, coordinates);
+        _ = PostMessage(window, WmLeftButtonDown, new IntPtr(MkLeftButton), coordinates);
+        _ = PostMessage(window, WmLeftButtonUp, IntPtr.Zero, coordinates);
+    }
+
     public static void CloseMiniPlayer(IntPtr window)
     {
         if (window != IntPtr.Zero)
@@ -104,4 +123,8 @@ internal static class GameMonitorPlacementService
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool PostMessage(
         IntPtr hwnd, uint message, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetClientRect(IntPtr hwnd, out NativeRect rect);
 }
