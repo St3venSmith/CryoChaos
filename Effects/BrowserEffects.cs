@@ -81,6 +81,25 @@ public abstract class RandomYouTubeEffectBase : IChaosEffect
             TryForceForegroundWindow(browserWindow);
             await Task.Delay(200, cancellationToken);
 
+            // YouTube remembers its own in-player volume independently of the
+            // Windows mixer. Focus the video without moving the real cursor,
+            // resume after that focus click, then send enough official
+            // volume-up shortcuts to guarantee the player reaches 100%.
+            GameMonitorPlacementService.FocusMiniPlayerVideo(browserWindow);
+            await Task.Delay(100, cancellationToken);
+            await context.Input.PressKeyboardAsync(
+                0x4B, // K: play/pause
+                TimeSpan.FromMilliseconds(20),
+                cancellationToken);
+            for (int index = 0; index < 20; index++)
+            {
+                await context.Input.PressKeyboardAsync(
+                    0x26, // Up arrow: YouTube volume +5%
+                    TimeSpan.FromMilliseconds(12),
+                    cancellationToken);
+                await Task.Delay(8, cancellationToken);
+            }
+
             foreach (int delay in new[] { 50, 100, 200, 350 })
             {
                 await Task.Delay(delay, cancellationToken);
