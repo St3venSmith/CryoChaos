@@ -28,8 +28,12 @@ public sealed class ScreenTransformService : IScreenTransformService
     private const uint SwpShowWindow = 0x0040;
 
     private readonly OverlayWindow _overlay;
-    private readonly SemaphoreSlim _effectGate = new(1, 1);
+    private const int MaximumSimultaneousScreenEffects = 2;
+    private readonly SemaphoreSlim _effectSlots = new(
+        MaximumSimultaneousScreenEffects,
+        MaximumSimultaneousScreenEffects);
     private readonly object _stateLock = new();
+    private readonly Dictionary<Guid, ScreenTransformMode> _activeModes = [];
     private readonly DispatcherTimer _zOrderTimer;
 
     private CaptureDiagnosticWindow? _transformWindow;
@@ -74,7 +78,8 @@ public sealed class ScreenTransformService : IScreenTransformService
                 nameof(ScreenTransformService));
         }
 
-        await _effectGate.WaitAsync(cancellationToken);
+        await _effectSlots.WaitAsync(cancellationToken);
+        Guid activationId = Guid.NewGuid();
 
         try
         {
@@ -91,20 +96,31 @@ public sealed class ScreenTransformService : IScreenTransformService
 
             await _overlay.Dispatcher.InvokeAsync(() =>
             {
-                CloseTransformWindowOnUiThread();
-
-                CaptureDiagnosticWindow window = new(
-                    destinyWindow,
-                    mode);
-
                 lock (_stateLock)
                 {
-                    _transformWindow = window;
+                    _activeModes[activationId] = mode;
                 }
 
-                window.Show();
+                ScreenTransformMode[] activeModes = GetActiveModes();
+                if (_transformWindow is null)
+                {
+                    CaptureDiagnosticWindow window = new(
+                        destinyWindow,
+                        activeModes);
+                    lock (_stateLock)
+                    {
+                        _transformWindow = window;
+                    }
+
+                    window.Show();
+                    _zOrderTimer.Start();
+                }
+                else
+                {
+                    _transformWindow.SetEffectModes(activeModes);
+                }
+
                 EnsureOverlayAboveTransform();
-                _zOrderTimer.Start();
             });
 
             try
@@ -113,12 +129,12 @@ public sealed class ScreenTransformService : IScreenTransformService
             }
             finally
             {
-                await StopAsync();
+                await RemoveEffectAsync(activationId);
             }
         }
         finally
         {
-            _effectGate.Release();
+            _effectSlots.Release();
         }
     }
 
@@ -130,8 +146,14 @@ public sealed class ScreenTransformService : IScreenTransformService
             return;
         }
 
-        await _overlay.Dispatcher.InvokeAsync(
-            CloseTransformWindowOnUiThread);
+        await _overlay.Dispatcher.InvokeAsync(() =>
+        {
+            lock (_stateLock)
+            {
+                _activeModes.Clear();
+            }
+            CloseTransformWindowOnUiThread();
+        });
     }
 
     private void CloseTransformWindowOnUiThread()
@@ -152,6 +174,44 @@ public sealed class ScreenTransformService : IScreenTransformService
         }
 
         window.Close();
+    }
+
+    private ScreenTransformMode[] GetActiveModes()
+    {
+        lock (_stateLock)
+        {
+            return _activeModes.Values
+                .Take(MaximumSimultaneousScreenEffects)
+                .ToArray();
+        }
+    }
+
+    private async Task RemoveEffectAsync(Guid activationId)
+    {
+        if (_overlay.Dispatcher.HasShutdownStarted ||
+            _overlay.Dispatcher.HasShutdownFinished)
+        {
+            return;
+        }
+
+        await _overlay.Dispatcher.InvokeAsync(() =>
+        {
+            lock (_stateLock)
+            {
+                _activeModes.Remove(activationId);
+            }
+
+            ScreenTransformMode[] remaining = GetActiveModes();
+            if (remaining.Length == 0)
+            {
+                CloseTransformWindowOnUiThread();
+            }
+            else
+            {
+                _transformWindow?.SetEffectModes(remaining);
+                EnsureOverlayAboveTransform();
+            }
+        });
     }
 
     private void EnsureOverlayAboveTransform()
@@ -238,7 +298,7 @@ public sealed class ScreenTransformService : IScreenTransformService
             }
         }
 
-        _effectGate.Dispose();
+        _effectSlots.Dispose();
     }
 
     [DllImport("user32.dll", SetLastError = true)]
