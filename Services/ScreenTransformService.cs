@@ -113,6 +113,7 @@ public sealed class ScreenTransformService : IScreenTransformService
                     }
 
                     window.Show();
+                    ForegroundWindowService.TryActivateDestinyWindow();
                     _zOrderTimer.Start();
                 }
                 else
@@ -252,18 +253,25 @@ public sealed class ScreenTransformService : IScreenTransformService
             SwpNoActivate |
             SwpShowWindow;
 
-        // Put the transformed live view in the topmost group first.
+        IntPtr destinyHandle = DestinyWindowService.FindDestinyWindow();
+        if (!DestinyWindowService.IsUsableWindow(destinyHandle))
+        {
+            return;
+        }
+
+        // Place the transformed view immediately above Destiny but outside
+        // the topmost group. Destiny remains the input owner, while every
+        // CryoChaos HUD/popup/media topmost window can appear above the view.
         SetWindowPos(
             transformHandle,
-            HwndTopmost,
+            destinyHandle,
             0,
             0,
             0,
             0,
             flags);
 
-        // Then put the normal CryoChaos overlay after it. The most recent
-        // HWND_TOPMOST call sits above the previous topmost window.
+        // Keep the normal CryoChaos HUD in the topmost group.
         SetWindowPos(
             overlayHandle,
             HwndTopmost,
