@@ -522,7 +522,7 @@ public sealed class RawMouseEffectService : IDisposable
             RawMouseEffectMode.Elastic =>
                 CalculateElastic(physicalX, physicalY),
             RawMouseEffectMode.Gravity =>
-                (physicalX, physicalY + 2.6),
+                (physicalX, physicalY + 0.65),
             RawMouseEffectMode.Magnet =>
                 CalculateMagnet(physicalX, physicalY),
             RawMouseEffectMode.Orbit =>
@@ -539,19 +539,19 @@ public sealed class RawMouseEffectService : IDisposable
 
     private (double X, double Y) CalculateMomentum(int physicalX, int physicalY)
     {
-        _physicsVelocityX = _physicsVelocityX * 0.86 + physicalX * 0.32;
-        _physicsVelocityY = _physicsVelocityY * 0.86 + physicalY * 0.32;
+        _physicsVelocityX = _physicsVelocityX * 0.72 + physicalX * 0.12;
+        _physicsVelocityY = _physicsVelocityY * 0.72 + physicalY * 0.12;
         return (physicalX + _physicsVelocityX, physicalY + _physicsVelocityY);
     }
 
     private (double X, double Y) CalculateElastic(int physicalX, int physicalY)
     {
-        _virtualPositionX += physicalX;
-        _virtualPositionY += physicalY;
-        _physicsVelocityX = (_physicsVelocityX + physicalX * 0.55 - _virtualPositionX * 0.075) * 0.91;
-        _physicsVelocityY = (_physicsVelocityY + physicalY * 0.55 - _virtualPositionY * 0.075) * 0.91;
-        _virtualPositionX += _physicsVelocityX;
-        _virtualPositionY += _physicsVelocityY;
+        _virtualPositionX = Math.Clamp(_virtualPositionX + physicalX, -450, 450);
+        _virtualPositionY = Math.Clamp(_virtualPositionY + physicalY, -450, 450);
+        _physicsVelocityX = (_physicsVelocityX + physicalX * 0.18 - _virtualPositionX * 0.025) * 0.78;
+        _physicsVelocityY = (_physicsVelocityY + physicalY * 0.18 - _virtualPositionY * 0.025) * 0.78;
+        _virtualPositionX = Math.Clamp(_virtualPositionX + _physicsVelocityX, -450, 450);
+        _virtualPositionY = Math.Clamp(_virtualPositionY + _physicsVelocityY, -450, 450);
         return (physicalX + _physicsVelocityX, physicalY + _physicsVelocityY);
     }
 
@@ -559,8 +559,8 @@ public sealed class RawMouseEffectService : IDisposable
     {
         _virtualPositionX = Math.Clamp(_virtualPositionX + physicalX, -900, 900);
         _virtualPositionY = Math.Clamp(_virtualPositionY + physicalY, -900, 900);
-        double pullX = -_virtualPositionX * 0.035;
-        double pullY = -_virtualPositionY * 0.035;
+        double pullX = -_virtualPositionX * 0.012;
+        double pullY = -_virtualPositionY * 0.012;
         _virtualPositionX += pullX;
         _virtualPositionY += pullY;
         return (physicalX + pullX, physicalY + pullY);
@@ -570,8 +570,8 @@ public sealed class RawMouseEffectService : IDisposable
     {
         double angle = _physicsTick * 0.105;
         return (
-            physicalX + Math.Cos(angle) * 3.4,
-            physicalY + Math.Sin(angle) * 3.4);
+            physicalX + Math.Cos(angle) * 0.9,
+            physicalY + Math.Sin(angle) * 0.9);
     }
 
     private (double X, double Y) CalculateDeadzone(int physicalX, int physicalY)
@@ -592,7 +592,7 @@ public sealed class RawMouseEffectService : IDisposable
         double distance = Math.Sqrt(
             _virtualPositionX * _virtualPositionX +
             _virtualPositionY * _virtualPositionY);
-        return distance <= 20
+        return distance <= 8
             ? (0, 0)
             : (physicalX, physicalY);
     }
@@ -601,8 +601,8 @@ public sealed class RawMouseEffectService : IDisposable
     {
         if (_physicsTick % 10 == 1)
         {
-            _windX = _windX * 0.72 + (_physicsRandom.NextDouble() * 7 - 3.5);
-            _windY = _windY * 0.72 + (_physicsRandom.NextDouble() * 5 - 2.5);
+            _windX = _windX * 0.60 + (_physicsRandom.NextDouble() * 2.2 - 1.1);
+            _windY = _windY * 0.60 + (_physicsRandom.NextDouble() * 1.6 - 0.8);
         }
         return (physicalX + _windX, physicalY + _windY);
     }
@@ -610,7 +610,7 @@ public sealed class RawMouseEffectService : IDisposable
     private (double X, double Y) CalculateFriction(int physicalX, int physicalY)
     {
         double seconds = _physicsTick * PumpIntervalMilliseconds / 1000.0;
-        double ramp = Math.Clamp(0.22 + seconds * 0.12, 0.22, 1.65);
+        double ramp = Math.Clamp(0.65 + seconds * 0.04, 0.65, 1.20);
         return (physicalX * ramp, physicalY * ramp);
     }
 
@@ -638,6 +638,21 @@ public sealed class RawMouseEffectService : IDisposable
             Math.Max(
                 observedMagnitude * AdaptiveBurstHeadroom,
                 debtMagnitude * 0.75));
+
+        if (mode is RawMouseEffectMode.Momentum or
+            RawMouseEffectMode.Elastic or
+            RawMouseEffectMode.Gravity or
+            RawMouseEffectMode.Magnet or
+            RawMouseEffectMode.Orbit or
+            RawMouseEffectMode.Deadzone or
+            RawMouseEffectMode.Wind or
+            RawMouseEffectMode.Friction)
+        {
+            return (int)Math.Clamp(
+                Math.Ceiling(requested),
+                1,
+                baseOutputLimit);
+        }
 
         return (int)Math.Clamp(
             Math.Ceiling(requested),
