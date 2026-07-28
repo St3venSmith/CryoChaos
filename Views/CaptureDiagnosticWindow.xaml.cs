@@ -213,10 +213,8 @@ public partial class CaptureDiagnosticWindow : Window
 
         LiveRenderer.RefreshSurfaceSize();
 
-        // Install cross-process click-through only after the first frame has
-        // proved that the swap chain is presenting. WM_NCHITTEST remains as a
-        // second layer, while WS_EX_TRANSPARENT lets input reach Destiny even
-        // though it runs on another UI thread and in another process.
+        // Install the remaining non-activation styles only after the first
+        // frame has proved that the swap chain is presenting.
         IntPtr currentStyle = GetWindowLongPtr(NativeHandle, GwlExStyle);
         long clickThroughStyle = currentStyle.ToInt64() |
                                  WsExTransparent |
@@ -238,12 +236,31 @@ public partial class CaptureDiagnosticWindow : Window
             SwpNoZOrder |
             SwpNoActivate |
             SwpFrameChanged);
+
+        // HTTRANSPARENT only forwards hit testing within this UI thread, and
+        // WS_EX_TRANSPARENT primarily affects painting order. Native-disabling
+        // the effect HWND makes Windows skip it as an input target, including
+        // its HwndHost child, while the swap chain remains visible.
+        DisableEffectWindowInput();
     }
 
     private void Window_SourceInitialized(object? sender, EventArgs e)
     {
         _hwndSource = HwndSource.FromHwnd(NativeHandle);
         _hwndSource?.AddHook(WindowProcedure);
+
+        if (_isEffectOverlay)
+        {
+            DisableEffectWindowInput();
+        }
+    }
+
+    private void DisableEffectWindowInput()
+    {
+        if (NativeHandle != IntPtr.Zero)
+        {
+            EnableWindow(NativeHandle, false);
+        }
     }
 
     private IntPtr WindowProcedure(
@@ -284,6 +301,11 @@ public partial class CaptureDiagnosticWindow : Window
     [DllImport("user32.dll")]
     private static extern uint GetDpiForWindow(IntPtr hwnd);
 
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool EnableWindow(
+        IntPtr hwnd,
+        [MarshalAs(UnmanagedType.Bool)] bool enable);
 
     private static IntPtr GetWindowLongPtr(IntPtr hwnd, int index) =>
         IntPtr.Size == 8
