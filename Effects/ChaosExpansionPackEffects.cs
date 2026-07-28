@@ -30,8 +30,8 @@ public abstract class ExpansionDisableBase : InputDisableChaosEffectBase
 public sealed class DisableInventoryEffect : ExpansionDisableBase
 {
     public DisableInventoryEffect() : base(
-        "disable_inventory", "Inventory Locked",
-        "Disables every inventory binding detected in the player's cvars.xml.",
+        "disable_inventory", "Menu Lock",
+        "Disables detected character, inventory, map, director, quest, roster, and pause-menu bindings.",
         [
             "inventory",
             "open_inventory",
@@ -39,66 +39,50 @@ public sealed class DisableInventoryEffect : ExpansionDisableBase
             "character_screen",
             "open_character",
             "ui_open_character",
-            "key_inventory"
+            "key_inventory",
+            "map",
+            "open_map",
+            "ui_open_map",
+            "director",
+            "open_director",
+            "ui_open_director",
+            "quests",
+            "quest_log",
+            "open_quests",
+            "ui_open_quests",
+            "roster",
+            "open_roster",
+            "ui_open_roster",
+            "clan",
+            "open_clan",
+            "ui_open_clan",
+            "season",
+            "open_season",
+            "ui_open_season",
+            "store",
+            "open_store",
+            "ui_open_store",
+            "journey",
+            "open_journey",
+            "ui_open_journey",
+            "loadouts",
+            "open_loadouts",
+            "ui_open_loadouts",
+            "ghost",
+            "open_ghost",
+            "nav_mode",
+            "game_menu",
+            "open_game_menu",
+            "pause",
+            "menu",
+            "ui_open_settings"
         ],
         []) { }
-}
 
-public abstract class ExpansionSoundBase : SoundChaosEffectBase
-{
-    private readonly ChaosEffectDefinition _definition;
-    private readonly string _sound;
-    private readonly int _repeats;
-
-    protected ExpansionSoundBase(
-        string id, string name, string description, string sound, int repeats)
-    {
-        _sound = sound;
-        _repeats = repeats;
-        _definition = ExpansionDefinitions.Create(
-            id, name, description, ChaosLevel.Low, 3, 35, true,
-            ChaosEffectType.Audio);
-    }
-
-    public override ChaosEffectDefinition Definition => _definition;
-    protected override string Sound => _sound;
-    protected override int RepeatCount(ChaosLevel level) => _repeats;
-    protected override TimeSpan RepeatDelay => TimeSpan.FromMilliseconds(420);
-}
-
-public sealed class ExclamationSoundEffect : ExpansionSoundBase
-{
-    public ExclamationSoundEffect() : base(
-        "sound_exclamation", "Incoming!", "Plays a sharp system exclamation.",
-        "SystemExclamation", 2) { }
-}
-
-public sealed class QuestionSoundEffect : ExpansionSoundBase
-{
-    public QuestionSoundEffect() : base(
-        "sound_question", "Confusion Chime", "Plays a questioning two-note interruption.",
-        "SystemQuestion", 2) { }
-}
-
-public sealed class NotificationBurstSoundEffect : ExpansionSoundBase
-{
-    public NotificationBurstSoundEffect() : base(
-        "sound_notification_burst", "Notification Storm",
-        "Plays a short burst of notification chimes.", "SystemAsterisk", 4) { }
-}
-
-public sealed class CriticalPulseSoundEffect : ExpansionSoundBase
-{
-    public CriticalPulseSoundEffect() : base(
-        "sound_critical_pulse", "Critical Pulse",
-        "Plays three spaced critical warning tones.", "SystemHand", 3) { }
-}
-
-public sealed class DefaultBeepSoundEffect : ExpansionSoundBase
-{
-    public DefaultBeepSoundEffect() : base(
-        "sound_default_beep", "Retro Beeps", "Plays a compact sequence of classic system beeps.",
-        "SystemDefault", 5) { }
+    // Destiny can place one alternate menu binding on a mouse button. Raw
+    // mouse buttons cannot be reliably suppressed externally, but that must
+    // not prevent all detected keyboard menu bindings from being locked.
+    protected override bool IgnoreUnsupportedMouseBindings => true;
 }
 
 internal static class ExpansionDefinitions
@@ -110,13 +94,12 @@ internal static class ExpansionDefinitions
         ChaosLevel level,
         int duration,
         int cooldown,
-        bool canStack,
-        ChaosEffectType type = ChaosEffectType.Keybind) => new()
+        bool canStack) => new()
         {
             Id = id,
             Name = name,
             Description = description,
-            Type = type,
+            Type = ChaosEffectType.Keybind,
             MinimumLevel = level,
             Weight = 10,
             DurationSeconds = duration,
