@@ -71,6 +71,11 @@ public sealed class ChaosEngine : IDisposable
         // other effect families.
         foreach (IChaosEffect effect in _effects)
         {
+            if (effect.Definition.Type == ChaosEffectType.ScreenTransform)
+            {
+                effect.Definition.CanStack = true;
+            }
+
             effect.Definition.Weight = effect.Definition.Id is
                 "mutator_purge_effects" or "mutator_protection"
                     ? RareMutatorWeight
@@ -603,6 +608,8 @@ public sealed class ChaosEngine : IDisposable
     {
         ActiveEffect[] active = activeEffects.ToArray();
         bool candidateIsMouse = candidate is RawMouseChaosEffectBase;
+        bool candidateIsScreen =
+            candidate.Definition.Type == ChaosEffectType.ScreenTransform;
 
         // Raw-mouse modifiers share one interception pipeline. Only one mouse
         // modifier may run at a time, but it must not prevent an unrelated
@@ -613,9 +620,17 @@ public sealed class ChaosEngine : IDisposable
                 item.Effect is not RawMouseChaosEffectBase);
         }
 
+        int activeScreenEffects = active.Count(item =>
+            item.Effect.Definition.Type == ChaosEffectType.ScreenTransform);
+        if (candidateIsScreen && activeScreenEffects >= 2)
+        {
+            return false;
+        }
+
         ActiveEffect[] relevant = active
             .Where(item =>
                 item.Effect.Definition.Type != ChaosEffectType.Mutator &&
+                item.Effect.Definition.Type != ChaosEffectType.ScreenTransform &&
                 item.Effect is not RawMouseChaosEffectBase)
             .ToArray();
 
