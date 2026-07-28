@@ -198,22 +198,22 @@ that device until it disconnects.
 
 - Derive from `RepeatingKeyChaosEffectBase`, set `VirtualKey`, and optionally
   override `PressCount`, `DelayBetweenPresses`, and `HoldDuration`.
-- Derive from `SoundChaosEffectBase` and set `Sound` to a Windows sound alias,
-  or set `Source` to `WaveFile` and use a relative `.wav` path.
+- Derive from `CustomSoundChaosEffectBase`, put a WAV file in `Sounds`, and
+  set only `FileName`.
 - Derive from `QteChaosEffectBase` to change the allowed keys, prompt count,
   response time, or failure penalty. A failed standard QTE queues two random
   stackable effects while still respecting the maximum-effects setting.
 
-Copy `YourRepeatingKeyEffect`, `YourSoundEffect`, or `YourQteEffect`, give it a
+Copy `YourRepeatingKeyEffect`, `YourCustomSoundEffect`, or `YourQteEffect`, give it a
 unique ID, and remove `[ChaosEffectTemplate]`. Automatic discovery adds it to
 the effect library without changing `ChaosEngine`.
 
-Custom sounds are supported. Put a PCM `.wav` file in a folder that is copied
-beside the built executable (for example `Sounds/scare.wav`), then override:
+Custom sounds are supported. Put a PCM `.wav` file in the project’s `Sounds`
+folder. Copy `YourCustomSoundEffect`, remove `[ChaosEffectTemplate]`, give the
+effect a unique ID, and change just:
 
 ```csharp
-protected override string Sound => "Sounds/scare.wav";
-protected override ChaosSoundSource Source => ChaosSoundSource.WaveFile;
+protected override string FileName => "scare.wav";
 ```
 
 The reusable `MathChallengeEffectBase` creates addition questions and, by
