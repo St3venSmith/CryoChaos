@@ -72,6 +72,18 @@ public abstract class SoundChaosEffectBase : IChaosEffect
             cancellationToken);
 }
 
+/// <summary>
+/// Simplified base for custom WAV effects. Put the file in the project's
+/// Sounds folder, derive from this class, and provide only FileName plus the
+/// normal effect definition.
+/// </summary>
+public abstract class CustomSoundChaosEffectBase : SoundChaosEffectBase
+{
+    protected abstract string FileName { get; }
+    protected sealed override string Sound => Path.Combine("Sounds", FileName);
+    protected sealed override ChaosSoundSource Source => ChaosSoundSource.WaveFile;
+}
+
 public abstract class QteChaosEffectBase : IChaosEffect
 {
     public abstract ChaosEffectDefinition Definition { get; }
@@ -334,16 +346,24 @@ public sealed class YourRepeatingKeyEffect : RepeatingKeyChaosEffectBase
 }
 
 [ChaosEffectTemplate]
-public sealed class YourSoundEffect : SoundChaosEffectBase
+public sealed class YourCustomSoundEffect : CustomSoundChaosEffectBase
 {
     public override ChaosEffectDefinition Definition { get; } = new()
     {
-        Id = "your_sound", Name = "Your Sound", Description = "Template sound effect.",
-        Type = ChaosEffectType.Graphic, MinimumLevel = ChaosLevel.Low, Weight = 1,
-        DurationSeconds = 4, CooldownSeconds = 30, CanStack = true
+        Id = "your_custom_sound",
+        Name = "Your Custom Sound",
+        Description = "Plays your WAV file from the Sounds folder.",
+        Type = ChaosEffectType.Audio,
+        MinimumLevel = ChaosLevel.Low,
+        Weight = 10,
+        DurationSeconds = 4,
+        CooldownSeconds = 30,
+        CanStack = true
     };
-    protected override string Sound => "SystemExclamation";
-    protected override int RepeatCount(ChaosLevel level) => 3;
+
+    // Copy this class, remove [ChaosEffectTemplate], choose a unique ID,
+    // and change this one filename. The project copies Sounds/*.wav for you.
+    protected override string FileName => "your-sound.wav";
 }
 
 [ChaosEffectTemplate]
