@@ -30,5 +30,6 @@ public enum ScreenTransformMode
     DreamBlur = 23,
     NightVision = 24,
     ScreenTear = 25,
-    FrameBufferFreeze = 26
+    FrameBufferFreeze = 26,
+    PortalVoid = 27
 }
