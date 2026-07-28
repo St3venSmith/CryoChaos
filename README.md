@@ -52,6 +52,12 @@ CryoChaos GPU work while preserving the newest available image and low latency.
 This limits CryoChaos itself; it cannot guarantee total GPU utilization below
 90% when Destiny or another application already saturates the GPU.
 
+Up to two screen effects can now run together through the same capture window.
+The renderer applies the first shader into an intermediate GPU texture and
+then applies the second shader into the swap chain. Each effect keeps its own
+duration, so one can end while the other continues without recreating the
+capture session or opening a second overlay.
+
 Existing effects:
 
 - 90-degree clockwise and counterclockwise rotation
