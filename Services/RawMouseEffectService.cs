@@ -22,7 +22,15 @@ public enum RawMouseEffectMode
     Orbit,
     Deadzone,
     Wind,
-    Friction
+    Friction,
+    Buoyancy,
+    AimWobble,
+    StickyHorizontal,
+    StickyVertical,
+    SensitivityPulse,
+    MouseEcho,
+    Ratchet,
+    Quicksand
 }
 
 /// <summary>
@@ -533,6 +541,22 @@ public sealed class RawMouseEffectService : IDisposable
                 CalculateWind(physicalX, physicalY),
             RawMouseEffectMode.Friction =>
                 CalculateFriction(physicalX, physicalY),
+            RawMouseEffectMode.Buoyancy =>
+                (physicalX, physicalY - 0.55),
+            RawMouseEffectMode.AimWobble =>
+                CalculateAimWobble(physicalX, physicalY),
+            RawMouseEffectMode.StickyHorizontal =>
+                (physicalX * 0.58, physicalY),
+            RawMouseEffectMode.StickyVertical =>
+                (physicalX, physicalY * 0.58),
+            RawMouseEffectMode.SensitivityPulse =>
+                CalculateSensitivityPulse(physicalX, physicalY),
+            RawMouseEffectMode.MouseEcho =>
+                CalculateMouseEcho(physicalX, physicalY),
+            RawMouseEffectMode.Ratchet =>
+                CalculateRatchet(physicalX, physicalY),
+            RawMouseEffectMode.Quicksand =>
+                CalculateQuicksand(physicalX, physicalY),
             _ => (physicalX, physicalY)
         };
     }
@@ -614,6 +638,48 @@ public sealed class RawMouseEffectService : IDisposable
         return (physicalX * ramp, physicalY * ramp);
     }
 
+    private (double X, double Y) CalculateAimWobble(int physicalX, int physicalY)
+    {
+        double seconds = _physicsTick * PumpIntervalMilliseconds / 1000.0;
+        return (
+            physicalX + Math.Sin(seconds * 4.1) * 0.7,
+            physicalY + Math.Cos(seconds * 3.3) * 0.55);
+    }
+
+    private (double X, double Y) CalculateSensitivityPulse(int physicalX, int physicalY)
+    {
+        double seconds = _physicsTick * PumpIntervalMilliseconds / 1000.0;
+        double scale = 0.82 + (Math.Sin(seconds * 2.2) * 0.5 + 0.5) * 0.36;
+        return (physicalX * scale, physicalY * scale);
+    }
+
+    private (double X, double Y) CalculateMouseEcho(int physicalX, int physicalY)
+    {
+        double echoX = _physicsVelocityX * 0.34;
+        double echoY = _physicsVelocityY * 0.34;
+        _physicsVelocityX = _physicsVelocityX * 0.76 + physicalX * 0.22;
+        _physicsVelocityY = _physicsVelocityY * 0.76 + physicalY * 0.22;
+        return (physicalX + echoX, physicalY + echoY);
+    }
+
+    private (double X, double Y) CalculateRatchet(int physicalX, int physicalY)
+    {
+        _virtualPositionX += physicalX;
+        _virtualPositionY += physicalY;
+        double outputX = Math.Truncate(_virtualPositionX / 5.0) * 5.0;
+        double outputY = Math.Truncate(_virtualPositionY / 5.0) * 5.0;
+        _virtualPositionX -= outputX;
+        _virtualPositionY -= outputY;
+        return (outputX, outputY);
+    }
+
+    private static (double X, double Y) CalculateQuicksand(int physicalX, int physicalY)
+    {
+        double speed = Math.Sqrt((double)physicalX * physicalX + (double)physicalY * physicalY);
+        double scale = Math.Clamp(0.62 + speed / 180.0, 0.62, 0.92);
+        return (physicalX * scale, physicalY * scale);
+    }
+
     private static int CalculateAdaptiveOutputLimit(
         RawMouseEffectMode mode,
         int baseOutputLimit,
@@ -646,7 +712,15 @@ public sealed class RawMouseEffectService : IDisposable
             RawMouseEffectMode.Orbit or
             RawMouseEffectMode.Deadzone or
             RawMouseEffectMode.Wind or
-            RawMouseEffectMode.Friction)
+            RawMouseEffectMode.Friction or
+            RawMouseEffectMode.Buoyancy or
+            RawMouseEffectMode.AimWobble or
+            RawMouseEffectMode.StickyHorizontal or
+            RawMouseEffectMode.StickyVertical or
+            RawMouseEffectMode.SensitivityPulse or
+            RawMouseEffectMode.MouseEcho or
+            RawMouseEffectMode.Ratchet or
+            RawMouseEffectMode.Quicksand)
         {
             return (int)Math.Clamp(
                 Math.Ceiling(requested),
