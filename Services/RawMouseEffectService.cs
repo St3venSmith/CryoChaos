@@ -649,7 +649,7 @@ public sealed class RawMouseEffectService : IDisposable
     private (double X, double Y) CalculateSensitivityPulse(int physicalX, int physicalY)
     {
         double seconds = _physicsTick * PumpIntervalMilliseconds / 1000.0;
-        double scale = 0.82 + (Math.Sin(seconds * 2.2) * 0.5 + 0.5) * 0.36;
+        double scale = 0.60 + (Math.Sin(seconds * 2.2) * 0.5 + 0.5) * 0.90;
         return (physicalX * scale, physicalY * scale);
     }
 
