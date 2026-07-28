@@ -214,6 +214,11 @@ internal sealed unsafe class D3D11ScreenEffectRenderer : IDisposable
             BindFlags = BindFlags.ShaderResource | BindFlags.RenderTarget
         });
         feedbackView = device.CreateShaderResourceView(feedbackTexture);
+        ClearFeedbackBuffer();
+    }
+
+    private void ClearFeedbackBuffer()
+    {
         using ID3D11RenderTargetView feedbackTarget =
             device.CreateRenderTargetView(feedbackTexture);
         context.ClearRenderTargetView(feedbackTarget, Colors.Black);
@@ -277,6 +282,7 @@ internal sealed unsafe class D3D11ScreenEffectRenderer : IDisposable
         previousFrameTimestamp = 0;
         renderCredits = 1.0;
         lastFrozenFrameBucket = -1;
+        ClearFeedbackBuffer();
         captureItem = item;
         sourceWidth = captureItem.Size.Width;
         sourceHeight = captureItem.Size.Height;
@@ -456,8 +462,22 @@ internal sealed unsafe class D3D11ScreenEffectRenderer : IDisposable
 
     private void Render(ID3D11ShaderResourceView frameView)
     {
+        bool feedbackMode = mode is ScreenTransformMode.PortalVoid or
+            ScreenTransformMode.UnclearedFrameBuffer;
+
+        if (feedbackMode)
+        {
+            // Seed the current target with the exact previous output. The
+            // feedback passes deliberately do not clear the color buffer;
+            // their pixel shader writes the new capture over retained data.
+            context.CopyResource(backBuffer, feedbackTexture);
+        }
+
         context.OMSetRenderTargets(renderTarget);
-        context.ClearRenderTargetView(renderTarget, Colors.Black);
+        if (!feedbackMode)
+        {
+            context.ClearRenderTargetView(renderTarget, Colors.Black);
+        }
 
         bool quarterTurn = mode is ScreenTransformMode.Rotate90Clockwise or
             ScreenTransformMode.Rotate90CounterClockwise;
@@ -510,8 +530,7 @@ internal sealed unsafe class D3D11ScreenEffectRenderer : IDisposable
         context.PSSetShaderResource(0, null!);
         context.PSSetShaderResource(1, null!);
 
-        if (mode is ScreenTransformMode.PortalVoid or
-            ScreenTransformMode.UnclearedFrameBuffer)
+        if (feedbackMode)
         {
             context.CopyResource(feedbackTexture, backBuffer);
         }
