@@ -154,6 +154,22 @@ float4 PSMain(VertexOutput input) : SV_TARGET
         float feedbackAmount = smoothstep(0.08, 0.45, EffectTime);
         color.rgb = lerp(color.rgb, recursiveTrail, feedbackAmount * 0.88);
     }
+    else if (mode == 28)                                          // uncleared framebuffer
+    {
+        float3 previous = PreviousFrameTexture.Sample(
+            LinearSampler,
+            uv).rgb;
+        float3 difference = abs(color.rgb - previous);
+        float motion = saturate(dot(
+            difference,
+            float3(0.299, 0.587, 0.114)) * 2.4);
+        float writeStrength = lerp(0.18, 0.42, motion);
+        float3 retained = previous * 0.992;
+        float3 writtenOver = lerp(retained, color.rgb, writeStrength);
+        float3 phosphorBurn = max(writtenOver, color.rgb * 0.78);
+        float startup = smoothstep(0.04, 0.30, EffectTime);
+        color.rgb = lerp(color.rgb, saturate(phosphorBurn), startup);
+    }
 
     if (mode == 23)                                               // dream blur
     {
