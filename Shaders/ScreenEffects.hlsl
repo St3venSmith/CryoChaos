@@ -120,6 +120,61 @@ float4 PSMain(VertexOutput input) : SV_TARGET
         float direction = bandNoise > 0.94 ? -1.0 : 1.0;
         uv.x += direction * (majorBand * 0.045 + brokenBand * 0.018);
     }
+    else if (mode == 29)                                         // VHS tracking
+    {
+        float trackingBand = smoothstep(0.10, 0.0, abs(uv.y - frac(EffectTime * 0.23)));
+        float rowNoise = RandomNoise(float2(floor(uv.y * 180.0), floor(EffectTime * 18.0)));
+        uv.x += (rowNoise - 0.5) * 0.010 + trackingBand * 0.055;
+    }
+    else if (mode == 31)                                         // radial rush
+    {
+        float2 centered = uv - 0.5;
+        float pulse = 0.035 + 0.018 * sin(EffectTime * 5.0);
+        uv = 0.5 + centered * (1.0 - pulse);
+    }
+    else if (mode == 32)                                         // water ripple
+    {
+        float2 centered = uv - 0.5;
+        float distanceFromCenter = length(centered);
+        uv += normalize(centered + 0.0001) *
+            sin(distanceFromCenter * 58.0 - EffectTime * 7.0) * 0.012;
+    }
+    else if (mode == 36)                                         // rolling shutter
+    {
+        float rowPhase = sin(uv.y * 20.0 - EffectTime * 5.5);
+        uv.x += rowPhase * 0.018 * (0.25 + uv.y);
+    }
+    else if (mode == 37)                                         // frosted glass
+    {
+        float2 cell = floor(uv * float2(95.0, 54.0));
+        float2 jitter = float2(
+            RandomNoise(cell + floor(EffectTime * 5.0)),
+            RandomNoise(cell.yx + 19.0 + floor(EffectTime * 5.0))) - 0.5;
+        uv += jitter * 0.007;
+    }
+    else if (mode == 39)                                         // CRT curvature
+    {
+        float2 centered = uv * 2.0 - 1.0;
+        float2 curved = centered * (1.0 + 0.11 * centered.yx * centered.yx);
+        uv = curved * 0.5 + 0.5;
+    }
+    else if (mode == 40)                                         // mosaic shuffle
+    {
+        const float2 tileCount = float2(8.0, 5.0);
+        float2 tile = floor(uv * tileCount);
+        float2 localUv = frac(uv * tileCount);
+        float shift = floor(EffectTime * 1.8 + tile.y);
+        tile.x = fmod(tile.x + shift, tileCount.x);
+        uv = (tile + localUv) / tileCount;
+    }
+    else if (mode == 43)                                         // tunnel vision twist
+    {
+        float2 centered = uv - 0.5;
+        float radius = length(centered);
+        float angle = atan2(centered.y, centered.x) +
+            smoothstep(0.18, 0.72, radius) * sin(EffectTime * 1.8) * 0.55;
+        uv = 0.5 + radius * float2(cos(angle), sin(angle));
+    }
 
     if (any(uv < 0.0) || any(uv > 1.0))
         return float4(0.0, 0.0, 0.0, 1.0);
@@ -135,6 +190,44 @@ float4 PSMain(VertexOutput input) : SV_TARGET
     }
 
     float4 color = CaptureTexture.Sample(LinearSampler, uv);
+
+    if (mode == 30)                                               // double vision
+    {
+        float2 sway = float2(
+            sin(EffectTime * 2.1) * 0.014,
+            cos(EffectTime * 1.7) * 0.006);
+        float3 ghost = CaptureTexture.Sample(
+            LinearSampler,
+            saturate(uv + sway)).rgb;
+        color.rgb = lerp(color.rgb, ghost, 0.38);
+    }
+    else if (mode == 31)                                          // radial rush streaks
+    {
+        float2 direction = (uv - 0.5) * 0.018;
+        color.rgb = color.rgb * 0.36;
+        color.rgb += CaptureTexture.Sample(LinearSampler, saturate(uv - direction)).rgb * 0.25;
+        color.rgb += CaptureTexture.Sample(LinearSampler, saturate(uv - direction * 2.0)).rgb * 0.21;
+        color.rgb += CaptureTexture.Sample(LinearSampler, saturate(uv - direction * 3.0)).rgb * 0.18;
+    }
+    else if (mode == 35)                                          // prism
+    {
+        float2 centered = uv - 0.5;
+        float2 direction = normalize(centered + 0.0001);
+        float2 tangent = float2(-direction.y, direction.x);
+        float shift = 0.010 + 0.004 * sin(EffectTime * 2.4);
+        color.r = CaptureTexture.Sample(LinearSampler, saturate(uv + tangent * shift)).r;
+        color.b = CaptureTexture.Sample(LinearSampler, saturate(uv - tangent * shift)).b;
+    }
+    else if (mode == 41)                                          // hyperspace trails
+    {
+        float2 direction = normalize((uv - 0.5) + 0.0001);
+        float brightness = max(color.r, max(color.g, color.b));
+        float3 trail = 0.0;
+        trail += CaptureTexture.Sample(LinearSampler, saturate(uv - direction * 0.012)).rgb;
+        trail += CaptureTexture.Sample(LinearSampler, saturate(uv - direction * 0.028)).rgb;
+        trail += CaptureTexture.Sample(LinearSampler, saturate(uv - direction * 0.050)).rgb;
+        color.rgb = saturate(color.rgb + trail * brightness * 0.22);
+    }
 
     if (mode == 27)                                               // Source-style hall of mirrors
     {
@@ -253,6 +346,64 @@ float4 PSMain(VertexOutput input) : SV_TARGET
         float green = saturate(luminance * 1.35 + (noise - 0.5) * 0.10) * scan;
         float vignette = 1.0 - smoothstep(0.30, 0.72, length(uv - 0.5));
         color.rgb = float3(green * 0.08, green, green * 0.18) * vignette;
+    }
+    else if (mode == 29)                                         // VHS tape finish
+    {
+        float grain = RandomNoise(input.Position.xy + floor(EffectTime * 30.0)) - 0.5;
+        float scanMask = 0.86 + 0.14 * sin(input.Position.y * 2.2);
+        color.r = CaptureTexture.Sample(LinearSampler, saturate(uv + float2(0.004, 0.0))).r;
+        color.b = CaptureTexture.Sample(LinearSampler, saturate(uv - float2(0.004, 0.0))).b;
+        color.rgb = saturate(color.rgb * scanMask + grain * 0.075);
+    }
+    else if (mode == 33)                                         // security camera
+    {
+        float luminance = dot(color.rgb, float3(0.2126, 0.7152, 0.0722));
+        float noise = RandomNoise(input.Position.xy + floor(EffectTime * 20.0)) - 0.5;
+        float scanMask = fmod(floor(input.Position.y), 3.0) < 1.0 ? 0.78 : 1.0;
+        float surveillanceLevel = saturate(
+            (luminance + noise * 0.11) * scanMask);
+        color.rgb = surveillanceLevel.xxx * float3(0.76, 0.94, 0.82);
+    }
+    else if (mode == 34)                                         // comic ink
+    {
+        float2 pixel = float2(1.0 / max(SourceWidth, 1.0), 1.0 / max(SourceHeight, 1.0));
+        float luminance = dot(color.rgb, float3(0.299, 0.587, 0.114));
+        float rightLum = dot(CaptureTexture.Sample(LinearSampler, uv + float2(pixel.x * 2.0, 0)).rgb,
+            float3(0.299, 0.587, 0.114));
+        float downLum = dot(CaptureTexture.Sample(LinearSampler, uv + float2(0, pixel.y * 2.0)).rgb,
+            float3(0.299, 0.587, 0.114));
+        float edge = saturate((abs(luminance - rightLum) + abs(luminance - downLum)) * 8.0);
+        color.rgb = floor(color.rgb * 5.0) / 5.0;
+        color.rgb *= 1.0 - edge * 0.88;
+    }
+    else if (mode == 37)                                         // frosted finish
+    {
+        color.rgb = lerp(color.rgb, dot(color.rgb, float3(0.25, 0.62, 0.13)).xxx, 0.12);
+    }
+    else if (mode == 38)                                         // solarize
+    {
+        color.rgb = abs(color.rgb * 2.0 - 1.0);
+        color.rgb = saturate(color.rgb * float3(1.08, 0.88, 1.16));
+    }
+    else if (mode == 39)                                         // CRT grille
+    {
+        float grille = 0.78 + 0.22 * sin(input.Position.x * 3.14159265);
+        float scanMask = 0.84 + 0.16 * sin(input.Position.y * 3.14159265);
+        color.rgb *= grille * scanMask;
+        color.rgb *= 1.0 - smoothstep(0.42, 0.72, length(uv - 0.5)) * 0.45;
+    }
+    else if (mode == 42)                                         // channel roulette
+    {
+        float phase = fmod(floor(EffectTime * 1.6), 3.0);
+        if (phase < 1.0) color.rgb = color.gbr;
+        else if (phase < 2.0) color.rgb = color.brg;
+        color.rgb = lerp(color.rgb, color.rgb * float3(1.08, 0.94, 1.04), 0.5);
+    }
+    else if (mode == 43)                                         // tunnel darkness
+    {
+        float radius = length(uv - 0.5);
+        float mask = 1.0 - smoothstep(0.18, 0.68, radius);
+        color.rgb *= lerp(0.10, 1.0, mask);
     }
 
     return float4(color.rgb, 1.0);
