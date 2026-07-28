@@ -42,6 +42,9 @@ internal sealed unsafe class D3D11ScreenEffectRenderer : IDisposable
     private ID3D11RenderTargetView renderTarget = null!;
     private ID3D11Texture2D feedbackTexture = null!;
     private ID3D11ShaderResourceView feedbackView = null!;
+    private ID3D11Texture2D compositionTexture = null!;
+    private ID3D11ShaderResourceView compositionView = null!;
+    private ID3D11RenderTargetView compositionTarget = null!;
     private ID3D11VertexShader vertexShader = null!;
     private ID3D11PixelShader pixelShader = null!;
     private ID3D11SamplerState sampler = null!;
@@ -61,6 +64,7 @@ internal sealed unsafe class D3D11ScreenEffectRenderer : IDisposable
     private bool disposed;
     private bool captureFaulted;
     private ScreenTransformMode mode;
+    private ScreenTransformMode secondaryMode;
     private readonly Stopwatch effectClock = Stopwatch.StartNew();
     private readonly Stopwatch fpsClock = Stopwatch.StartNew();
     private int framesSinceFpsUpdate;
@@ -90,6 +94,23 @@ internal sealed unsafe class D3D11ScreenEffectRenderer : IDisposable
                 effectClock.Restart();
                 lastFrozenFrameBucket = -1;
             }
+        }
+    }
+
+    public void SetEffectModes(IReadOnlyList<ScreenTransformMode> modes)
+    {
+        lock (sync)
+        {
+            ScreenTransformMode[] normalized = modes
+                .Where(value => value != ScreenTransformMode.None)
+                .Distinct()
+                .Take(2)
+                .ToArray();
+            mode = normalized.ElementAtOrDefault(0);
+            secondaryMode = normalized.ElementAtOrDefault(1);
+            effectClock.Restart();
+            lastFrozenFrameBucket = -1;
+            ClearFeedbackBuffer();
         }
     }
 
@@ -198,6 +219,7 @@ internal sealed unsafe class D3D11ScreenEffectRenderer : IDisposable
         backBuffer = swapChain.GetBuffer<ID3D11Texture2D>(0);
         renderTarget = device.CreateRenderTargetView(backBuffer);
         CreateFeedbackBuffer();
+        CreateCompositionBuffer();
     }
 
     private void CreateFeedbackBuffer()
@@ -224,6 +246,23 @@ internal sealed unsafe class D3D11ScreenEffectRenderer : IDisposable
         context.ClearRenderTargetView(feedbackTarget, Colors.Black);
     }
 
+    private void CreateCompositionBuffer()
+    {
+        compositionTexture = device.CreateTexture2D(new Texture2DDescription
+        {
+            Width = (uint)outputWidth,
+            Height = (uint)outputHeight,
+            MipLevels = 1,
+            ArraySize = 1,
+            Format = Format.B8G8R8A8_UNorm,
+            SampleDescription = SampleDescription.Default,
+            Usage = ResourceUsage.Default,
+            BindFlags = BindFlags.ShaderResource | BindFlags.RenderTarget
+        });
+        compositionView = device.CreateShaderResourceView(compositionTexture);
+        compositionTarget = device.CreateRenderTargetView(compositionTexture);
+    }
+
     public void Resize(int width, int height)
     {
         lock (sync)
@@ -234,6 +273,9 @@ internal sealed unsafe class D3D11ScreenEffectRenderer : IDisposable
             outputWidth = width;
             outputHeight = height;
             context.ClearState();
+            compositionTarget.Dispose();
+            compositionView.Dispose();
+            compositionTexture.Dispose();
             feedbackView.Dispose();
             feedbackTexture.Dispose();
             renderTarget.Dispose();
@@ -246,12 +288,17 @@ internal sealed unsafe class D3D11ScreenEffectRenderer : IDisposable
     }
 
     public void StartCapture(IntPtr targetHwnd, ScreenTransformMode effectMode)
+        => StartCapture(targetHwnd, [effectMode]);
+
+    public void StartCapture(
+        IntPtr targetHwnd,
+        IReadOnlyList<ScreenTransformMode> effectModes)
     {
         lock (sync)
         {
             StartCaptureCore(
                 CaptureInterop.CreateForWindow(targetHwnd),
-                effectMode);
+                effectModes);
         }
     }
 
@@ -263,16 +310,22 @@ internal sealed unsafe class D3D11ScreenEffectRenderer : IDisposable
         {
             StartCaptureCore(
                 CaptureInterop.CreateForMonitor(monitor),
-                effectMode);
+                [effectMode]);
         }
     }
 
     private void StartCaptureCore(
         GraphicsCaptureItem item,
-        ScreenTransformMode effectMode)
+        IReadOnlyList<ScreenTransformMode> effectModes)
     {
         StopCaptureCore();
-        mode = effectMode;
+        ScreenTransformMode[] normalized = effectModes
+            .Where(value => value != ScreenTransformMode.None)
+            .Distinct()
+            .Take(2)
+            .ToArray();
+        mode = normalized.ElementAtOrDefault(0);
+        secondaryMode = normalized.ElementAtOrDefault(1);
         effectClock.Restart();
         fpsClock.Restart();
         framesSinceFpsUpdate = 0;
@@ -416,7 +469,8 @@ internal sealed unsafe class D3D11ScreenEffectRenderer : IDisposable
 
     private bool ShouldRenderFrame()
     {
-        if (mode == ScreenTransformMode.FrameBufferFreeze)
+        if (mode == ScreenTransformMode.FrameBufferFreeze ||
+            secondaryMode == ScreenTransformMode.FrameBufferFreeze)
         {
             // Present one fresh capture, then deliberately retain that swap-
             // chain frame until the next bucket. This is an actual held frame,
@@ -462,25 +516,13 @@ internal sealed unsafe class D3D11ScreenEffectRenderer : IDisposable
 
     private void Render(ID3D11ShaderResourceView frameView)
     {
-        bool feedbackMode = mode is ScreenTransformMode.PortalVoid or
-            ScreenTransformMode.UnclearedFrameBuffer;
-
-        if (feedbackMode)
-        {
-            // Seed the current target with the exact previous output. The
-            // feedback passes deliberately do not clear the color buffer;
-            // their pixel shader writes the new capture over retained data.
-            context.CopyResource(backBuffer, feedbackTexture);
-        }
-
-        context.OMSetRenderTargets(renderTarget);
-        if (!feedbackMode)
-        {
-            context.ClearRenderTargetView(renderTarget, Colors.Black);
-        }
-
-        bool quarterTurn = mode is ScreenTransformMode.Rotate90Clockwise or
-            ScreenTransformMode.Rotate90CounterClockwise;
+        bool hasSecondPass = secondaryMode != ScreenTransformMode.None;
+        bool feedbackMode = IsFeedbackMode(mode) ||
+            IsFeedbackMode(secondaryMode);
+        int quarterTurns =
+            (IsQuarterTurn(mode) ? 1 : 0) +
+            (IsQuarterTurn(secondaryMode) ? 1 : 0);
+        bool quarterTurn = quarterTurns % 2 != 0;
         float sourceAspect = quarterTurn
             ? (float)sourceHeight / sourceWidth
             : (float)sourceWidth / sourceHeight;
@@ -501,34 +543,23 @@ internal sealed unsafe class D3D11ScreenEffectRenderer : IDisposable
             y = (outputHeight - viewHeight) * 0.5f;
         }
 
-        context.RSSetViewport(new Viewport(x, y, viewWidth, viewHeight, 0, 1));
+        Viewport fittedViewport = new(x, y, viewWidth, viewHeight, 0, 1);
+        Viewport fullViewport = new(
+            0, 0, outputWidth, outputHeight, 0, 1);
 
-        PreviewSettings settings = new()
+        if (hasSecondPass)
         {
-            Mode = (float)mode,
-            Time = (float)effectClock.Elapsed.TotalSeconds,
-            SourceWidth = sourceWidth,
-            SourceHeight = sourceHeight
-        };
-        MappedSubresource mapped = context.Map(settingsBuffer, MapMode.WriteDiscard);
-        Unsafe.Copy(mapped.DataPointer.ToPointer(), ref settings);
-        context.Unmap(settingsBuffer, 0);
-
-        context.IASetInputLayout(null);
-        context.IASetPrimitiveTopology(PrimitiveTopology.TriangleList);
-        context.VSSetShader(vertexShader);
-        context.VSSetConstantBuffer(0, settingsBuffer);
-        context.PSSetShader(pixelShader);
-        // EffectSettings is consumed by PSMain. Binding the buffer only to
-        // the vertex stage leaves EffectMode at zero in the pixel shader,
-        // making every transform/effect look like an unchanged live copy.
-        context.PSSetConstantBuffer(0, settingsBuffer);
-        context.PSSetShaderResource(0, frameView);
-        context.PSSetShaderResource(1, feedbackView);
-        context.PSSetSampler(0, sampler);
-        context.Draw(3, 0);
-        context.PSSetShaderResource(0, null!);
-        context.PSSetShaderResource(1, null!);
+            DrawPass(frameView, compositionTarget, mode, fittedViewport);
+            DrawPass(
+                compositionView,
+                renderTarget,
+                secondaryMode,
+                fullViewport);
+        }
+        else
+        {
+            DrawPass(frameView, renderTarget, mode, fittedViewport);
+        }
 
         if (feedbackMode)
         {
@@ -546,6 +577,50 @@ internal sealed unsafe class D3D11ScreenEffectRenderer : IDisposable
             fpsClock.Restart();
         }
     }
+
+    private void DrawPass(
+        ID3D11ShaderResourceView sourceView,
+        ID3D11RenderTargetView target,
+        ScreenTransformMode effectMode,
+        Viewport viewport)
+    {
+        context.OMSetRenderTargets(target);
+        context.ClearRenderTargetView(target, Colors.Black);
+        context.RSSetViewport(viewport);
+
+        PreviewSettings settings = new()
+        {
+            Mode = (float)effectMode,
+            Time = (float)effectClock.Elapsed.TotalSeconds,
+            SourceWidth = sourceWidth,
+            SourceHeight = sourceHeight
+        };
+        MappedSubresource mapped = context.Map(settingsBuffer, MapMode.WriteDiscard);
+        Unsafe.Copy(mapped.DataPointer.ToPointer(), ref settings);
+        context.Unmap(settingsBuffer, 0);
+
+        context.IASetInputLayout(null);
+        context.IASetPrimitiveTopology(PrimitiveTopology.TriangleList);
+        context.VSSetShader(vertexShader);
+        context.VSSetConstantBuffer(0, settingsBuffer);
+        context.PSSetShader(pixelShader);
+        context.PSSetConstantBuffer(0, settingsBuffer);
+        context.PSSetShaderResource(0, sourceView);
+        context.PSSetShaderResource(1, feedbackView);
+        context.PSSetSampler(0, sampler);
+        context.Draw(3, 0);
+        context.PSSetShaderResource(0, null!);
+        context.PSSetShaderResource(1, null!);
+        context.OMSetRenderTargets((ID3D11RenderTargetView?)null);
+    }
+
+    private static bool IsQuarterTurn(ScreenTransformMode value) =>
+        value is ScreenTransformMode.Rotate90Clockwise or
+            ScreenTransformMode.Rotate90CounterClockwise;
+
+    private static bool IsFeedbackMode(ScreenTransformMode value) =>
+        value is ScreenTransformMode.PortalVoid or
+            ScreenTransformMode.UnclearedFrameBuffer;
 
     public void Dispose()
     {
@@ -577,6 +652,9 @@ internal sealed unsafe class D3D11ScreenEffectRenderer : IDisposable
             DisposeSafely(pixelShader, "pixel shader");
             DisposeSafely(vertexShader, "vertex shader");
             DisposeSafely(renderTarget, "render target");
+            DisposeSafely(compositionTarget, "composition render target");
+            DisposeSafely(compositionView, "composition shader view");
+            DisposeSafely(compositionTexture, "composition texture");
             DisposeSafely(feedbackView, "feedback shader view");
             DisposeSafely(feedbackTexture, "feedback texture");
             DisposeSafely(backBuffer, "swap-chain back buffer");
