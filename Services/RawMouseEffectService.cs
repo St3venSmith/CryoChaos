@@ -60,6 +60,7 @@ public sealed class RawMouseEffectService : IDisposable
 
     private const uint InputMouse = 0;
     private const uint MouseEventMove = 0x0001;
+    private const int CursorShowing = 0x00000001;
     private const uint InjectionMarkerValue = 0x4352594F;
     private static readonly UIntPtr InjectionMarker =
         new(InjectionMarkerValue);
@@ -404,6 +405,16 @@ public sealed class RawMouseEffectService : IDisposable
             int physicalY = ClampToInt(
                 Interlocked.Exchange(ref _pendingY, 0));
 
+            // Destiny exposes a normal visible cursor in inventory, director,
+            // character, and settings screens. Never inject camera
+            // corrections while that cursor is active; physical movement
+            // must remain untouched so menus stay usable during an effect.
+            if (IsSystemCursorVisible())
+            {
+                ResetPhysicsState();
+                return;
+            }
+
             RawMouseEffectMode mode;
             double multiplier;
             int baseOutputLimit;
@@ -559,6 +570,29 @@ public sealed class RawMouseEffectService : IDisposable
                 CalculateQuicksand(physicalX, physicalY),
             _ => (physicalX, physicalY)
         };
+    }
+
+    private static bool IsSystemCursorVisible()
+    {
+        CursorInfo info = new()
+        {
+            Size = (uint)Marshal.SizeOf<CursorInfo>()
+        };
+        return GetCursorInfo(ref info) &&
+            (info.Flags & CursorShowing) != 0;
+    }
+
+    private void ResetPhysicsState()
+    {
+        _correctionDebtX = 0;
+        _correctionDebtY = 0;
+        _physicsVelocityX = 0;
+        _physicsVelocityY = 0;
+        _virtualPositionX = 0;
+        _virtualPositionY = 0;
+        _windX = 0;
+        _windY = 0;
+        _deadzoneIdleTicks = 0;
     }
 
     private (double X, double Y) CalculateMomentum(int physicalX, int physicalY)
@@ -943,6 +977,26 @@ public sealed class RawMouseEffectService : IDisposable
     private static extern bool UnregisterHotKey(
         IntPtr window,
         int id);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetCursorInfo(ref CursorInfo cursorInfo);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct CursorInfo
+    {
+        public uint Size;
+        public int Flags;
+        public IntPtr Cursor;
+        public NativePoint ScreenPosition;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativePoint
+    {
+        public int X;
+        public int Y;
+    }
 
     [StructLayout(LayoutKind.Sequential)]
     private struct RawInputDevice
