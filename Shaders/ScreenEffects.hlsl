@@ -159,29 +159,11 @@ float4 PSMain(VertexOutput input) : SV_TARGET
         float3 previous = PreviousFrameTexture.Sample(
             LinearSampler,
             uv).rgb;
-        float2 pixel = float2(
-            1.0 / max(SourceWidth, 1.0),
-            1.0 / max(SourceHeight, 1.0));
-        float2 smearDirection = pixel * float2(
-            2.0 + sin(EffectTime * 1.7),
-            1.0 + cos(EffectTime * 1.3) * 0.5);
-        float3 smearA = PreviousFrameTexture.Sample(
-            LinearSampler,
-            saturate(uv - smearDirection)).rgb;
-        float3 smearB = PreviousFrameTexture.Sample(
-            LinearSampler,
-            saturate(uv - smearDirection * 2.0)).rgb;
-        float3 smearC = PreviousFrameTexture.Sample(
-            LinearSampler,
-            saturate(uv - smearDirection * 4.0)).rgb;
 
-        // No decay is applied: once a bright/color channel is written, it
-        // remains for the lifetime of the effect and spreads into adjacent
-        // pixels on every subsequent feedback pass.
-        float3 permanentHistory = max(
-            previous,
-            max(smearA, max(smearB, smearC)));
-        float3 writtenOver = max(permanentHistory, color.rgb);
+        // Preserve framebuffer data only at the exact same pixel coordinate.
+        // Nothing decays and no neighboring pixels are sampled, so the old
+        // buffer is written over in place without any artificial spreading.
+        float3 writtenOver = max(previous, color.rgb);
         float startup = smoothstep(0.04, 0.30, EffectTime);
         color.rgb = lerp(color.rgb, saturate(writtenOver), startup);
     }
