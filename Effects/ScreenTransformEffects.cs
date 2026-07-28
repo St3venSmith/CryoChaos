@@ -525,3 +525,22 @@ public sealed class PortalVoidScreenEffect : ScreenTransformEffectBase
 
     protected override ScreenTransformMode TransformMode => ScreenTransformMode.PortalVoid;
 }
+
+public sealed class UnclearedFrameBufferEffect : ScreenTransformEffectBase
+{
+    public override ChaosEffectDefinition Definition { get; } = new()
+    {
+        Id = "uncleared_frame_buffer",
+        Name = "Dirty Framebuffer",
+        Description = "Retains the previous frame while repeatedly writing new imagery over it.",
+        Type = ChaosEffectType.ScreenTransform,
+        MinimumLevel = ChaosLevel.Chaos,
+        Weight = 1,
+        DurationSeconds = 10,
+        CooldownSeconds = 145,
+        CanStack = false
+    };
+
+    protected override ScreenTransformMode TransformMode =>
+        ScreenTransformMode.UnclearedFrameBuffer;
+}
