@@ -25,12 +25,6 @@ internal static class NativeMethods
 
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
-    internal static extern bool EnableWindow(
-        IntPtr hwnd,
-        [MarshalAs(UnmanagedType.Bool)] bool enable);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool GetClientRect(
         IntPtr hwnd,
         out NativeRect rectangle);
