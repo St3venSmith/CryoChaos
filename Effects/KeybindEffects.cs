@@ -266,6 +266,7 @@ public abstract class InputDisableChaosEffectBase : IChaosEffect
     public abstract ChaosEffectDefinition Definition { get; }
     protected abstract string[] ActionAliases { get; }
     protected virtual IReadOnlyList<InputBinding> AdditionalBindings => [];
+    protected virtual bool IgnoreUnsupportedMouseBindings => false;
 
     protected virtual TimeSpan DisableDuration(ChaosLevel level) =>
         TimeSpan.FromSeconds(Definition.DurationSeconds);
@@ -310,12 +311,21 @@ public abstract class InputDisableChaosEffectBase : IChaosEffect
         // suppress the player's binding. Substitute another random effect if
         // either the detected action or its explicit fallback uses a mouse
         // button or wheel.
-        if (bindings.Any(binding =>
+        bool containsMouseBinding = bindings.Any(binding =>
                 binding.Kind is InputBindingKind.MouseButton or
-                    InputBindingKind.MouseWheel))
+                    InputBindingKind.MouseWheel);
+
+        if (containsMouseBinding && !IgnoreUnsupportedMouseBindings)
         {
             context.QueueRandomEffects(1);
             return;
+        }
+
+        if (IgnoreUnsupportedMouseBindings)
+        {
+            bindings.RemoveAll(binding =>
+                binding.Kind is InputBindingKind.MouseButton or
+                    InputBindingKind.MouseWheel);
         }
 
         if (bindings.Count == 0)
