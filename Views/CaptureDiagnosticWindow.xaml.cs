@@ -17,10 +17,8 @@ public partial class CaptureDiagnosticWindow : Window
     private const int WmMouseActivate = 0x0021;
     private static readonly IntPtr HtTransparent = new(-1);
     private static readonly IntPtr MaNoActivate = new(3);
-    private static readonly IntPtr HwndTopmost = new(-1);
     private const uint SwpNoSize = 0x0001;
     private const uint SwpNoMove = 0x0002;
-    private const uint SwpNoZOrder = 0x0004;
     private const uint SwpNoActivate = 0x0010;
     private const uint SwpFrameChanged = 0x0020;
     private const uint SwpShowWindow = 0x0040;
@@ -190,7 +188,10 @@ public partial class CaptureDiagnosticWindow : Window
 
         WindowStyle = WindowStyle.None;
         ResizeMode = ResizeMode.NoResize;
-        Topmost = true;
+        // Keep the effect directly above Destiny but outside the topmost
+        // group. CryoChaos HUD, QTE, ad, and media windows can then render
+        // above it while Destiny continues to own foreground input.
+        Topmost = false;
 
         NativeRect bounds =
             DestinyWindowService.GetMonitorBounds(_destinyWindow);
@@ -204,7 +205,7 @@ public partial class CaptureDiagnosticWindow : Window
 
         SetWindowPos(
             NativeHandle,
-            HwndTopmost,
+            _destinyWindow,
             bounds.Left,
             bounds.Top,
             bounds.Width,
@@ -213,10 +214,24 @@ public partial class CaptureDiagnosticWindow : Window
 
         LiveRenderer.RefreshSurfaceSize();
 
-        // Install cross-process click-through only after the first frame has
-        // proved that the swap chain is presenting. WM_NCHITTEST remains as a
-        // second layer, while WS_EX_TRANSPARENT lets input reach Destiny even
-        // though it runs on another UI thread and in another process.
+        // Reassert the creation-time click-through styles after WPF changes
+        // WindowStyle during promotion.
+        ApplyNonActivatingClickThrough();
+    }
+
+    private void Window_SourceInitialized(object? sender, EventArgs e)
+    {
+        _hwndSource = HwndSource.FromHwnd(NativeHandle);
+        _hwndSource?.AddHook(WindowProcedure);
+
+        if (_isEffectOverlay)
+        {
+            ApplyNonActivatingClickThrough();
+        }
+    }
+
+    private void ApplyNonActivatingClickThrough()
+    {
         IntPtr currentStyle = GetWindowLongPtr(NativeHandle, GwlExStyle);
         long clickThroughStyle = currentStyle.ToInt64() |
                                  WsExTransparent |
@@ -228,22 +243,15 @@ public partial class CaptureDiagnosticWindow : Window
             new IntPtr(clickThroughStyle));
         SetWindowPos(
             NativeHandle,
-            IntPtr.Zero,
+            _destinyWindow,
             0,
             0,
             0,
             0,
             SwpNoSize |
             SwpNoMove |
-            SwpNoZOrder |
             SwpNoActivate |
             SwpFrameChanged);
-    }
-
-    private void Window_SourceInitialized(object? sender, EventArgs e)
-    {
-        _hwndSource = HwndSource.FromHwnd(NativeHandle);
-        _hwndSource?.AddHook(WindowProcedure);
     }
 
     private IntPtr WindowProcedure(
