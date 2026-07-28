@@ -29,7 +29,7 @@ public sealed class ChaosEffectDefinition : INotifyPropertyChanged
     }
     public required int DurationSeconds { get; init; }
     public required int CooldownSeconds { get; init; }
-    public bool CanStack { get; init; }
+    public bool CanStack { get; set; }
 
     public bool Enabled
     {
