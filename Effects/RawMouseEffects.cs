@@ -119,7 +119,7 @@ public sealed class FastMouseSensitivityEffect : RawMouseChaosEffectBase
     {
         Id = "raw_fast_sensitivity",
         Name = "Hyper Sensitivity",
-        Description = "Raises physical mouse sensitivity to 1.4x.",
+        Description = "Raises physical mouse sensitivity to 1.8x.",
         Type = ChaosEffectType.Keybind,
         MinimumLevel = ChaosLevel.Normal,
         Weight = 5,
@@ -130,8 +130,8 @@ public sealed class FastMouseSensitivityEffect : RawMouseChaosEffectBase
 
     protected override RawMouseEffectMode Mode =>
         RawMouseEffectMode.Scale;
-    protected override double SensitivityMultiplier => 1.4;
-    protected override int BaseOutputLimit => 140;
+    protected override double SensitivityMultiplier => 1.8;
+    protected override int BaseOutputLimit => 260;
 }
 
 public sealed class SlowMouseSensitivityEffect : RawMouseChaosEffectBase
@@ -140,7 +140,7 @@ public sealed class SlowMouseSensitivityEffect : RawMouseChaosEffectBase
     {
         Id = "raw_slow_sensitivity",
         Name = "Sluggish Aim",
-        Description = "Lowers physical mouse sensitivity to 0.7x.",
+        Description = "Lowers physical mouse sensitivity to 0.45x.",
         Type = ChaosEffectType.Keybind,
         MinimumLevel = ChaosLevel.Normal,
         Weight = 5,
@@ -151,8 +151,8 @@ public sealed class SlowMouseSensitivityEffect : RawMouseChaosEffectBase
 
     protected override RawMouseEffectMode Mode =>
         RawMouseEffectMode.Scale;
-    protected override double SensitivityMultiplier => 0.7;
-    protected override int BaseOutputLimit => 140;
+    protected override double SensitivityMultiplier => 0.45;
+    protected override int BaseOutputLimit => 260;
 }
 
 public sealed class InvertHorizontalCameraEffect : RawMouseChaosEffectBase
