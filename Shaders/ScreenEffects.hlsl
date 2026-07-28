@@ -106,6 +106,19 @@ float4 PSMain(VertexOutput input) : SV_TARGET
         if (fmod(tileIndex.y, 2.0) >= 1.0) localUv.y = 1.0 - localUv.y;
         uv = localUv;
     }
+    else if (mode == 25)                                         // screen tearing
+    {
+        float movingTear = frac(EffectTime * 0.72);
+        float tearDistance = abs(uv.y - movingTear);
+        float majorBand = 1.0 - step(0.075, tearDistance);
+        float bandIndex = floor(uv.y * 30.0);
+        float bandNoise = RandomNoise(float2(
+            bandIndex,
+            floor(EffectTime * 12.0)));
+        float brokenBand = step(0.88, bandNoise);
+        float direction = bandNoise > 0.94 ? -1.0 : 1.0;
+        uv.x += direction * (majorBand * 0.045 + brokenBand * 0.018);
+    }
 
     if (any(uv < 0.0) || any(uv > 1.0))
         return float4(0.0, 0.0, 0.0, 1.0);
