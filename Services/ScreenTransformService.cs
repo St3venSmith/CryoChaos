@@ -46,10 +46,6 @@ public sealed class ScreenTransformService : IScreenTransformService
     {
         _overlay = overlay;
 
-        // Reassert the two-window order while a live transform is active:
-        // Destiny -> transformed live view -> CryoChaos HUD/effect overlay.
-        // This prevents another topmost update from placing the copied view
-        // over the progress bar or current-effect card.
         _zOrderTimer = new DispatcherTimer(DispatcherPriority.Send)
         {
             Interval = TimeSpan.FromMilliseconds(250)
@@ -88,8 +84,7 @@ public sealed class ScreenTransformService : IScreenTransformService
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            IntPtr destinyWindow =
-                DestinyWindowService.FindDestinyWindow();
+            IntPtr destinyWindow = DestinyWindowService.FindDestinyWindow();
 
             if (!DestinyWindowService.IsUsableWindow(destinyWindow))
             {
@@ -107,31 +102,13 @@ public sealed class ScreenTransformService : IScreenTransformService
                 ScreenTransformMode[] activeModes = GetActiveModes();
                 if (_transformWindow is null)
                 {
-                    bool restoreDestinyFocus =
-                        ForegroundWindowService.IsWindowForeground(
-                            destinyWindow);
-
-                    CaptureDiagnosticWindow window = new(
-                        destinyWindow,
-                        activeModes);
+                    CaptureDiagnosticWindow window = new(destinyWindow, activeModes);
                     lock (_stateLock)
                     {
                         _transformWindow = window;
                     }
 
                     window.Show();
-
-                    // Creating a WPF/HwndHost window can briefly transfer the
-                    // foreground queue even with WS_EX_NOACTIVATE. Restore
-                    // Destiny only when it owned focus before the effect, so
-                    // an intentional Alt+Tab is never overridden.
-                    if (restoreDestinyFocus &&
-                        !ForegroundWindowService.IsWindowForeground(
-                            destinyWindow))
-                    {
-                        ForegroundWindowService.TryActivateDestinyWindow();
-                    }
-
                     _zOrderTimer.Start();
                 }
                 else
@@ -249,8 +226,7 @@ public sealed class ScreenTransformService : IScreenTransformService
             transformWindow = _transformWindow;
         }
 
-        if (transformWindow is null ||
-            !transformWindow.IsVisible)
+        if (transformWindow is null || !transformWindow.IsVisible)
         {
             if (transformWindow is null)
             {
@@ -259,20 +235,13 @@ public sealed class ScreenTransformService : IScreenTransformService
         }
 
         IntPtr transformHandle = transformWindow.NativeHandle;
+        IntPtr overlayHandle = new WindowInteropHelper(_overlay).Handle;
 
-        IntPtr overlayHandle =
-            new WindowInteropHelper(_overlay).Handle;
-
-        if (transformHandle == IntPtr.Zero ||
-            overlayHandle == IntPtr.Zero)
+        if (transformHandle == IntPtr.Zero || overlayHandle == IntPtr.Zero)
         {
             return;
         }
 
-        // A fullscreen topmost effect should cover Destiny only. When the
-        // player Alt+Tabs, hide the copied surface so the CryoChaos control
-        // panel or any other desktop window remains usable. Restore it without
-        // activation as soon as Destiny owns foreground focus again.
         if (!ForegroundWindowService.IsDestinyForeground())
         {
             if (!_transformHiddenForFocus)
@@ -295,7 +264,6 @@ public sealed class ScreenTransformService : IScreenTransformService
             SwpNoActivate |
             SwpShowWindow;
 
-        // Put the transformed live view in the topmost group first.
         SetWindowPos(
             transformHandle,
             HwndTopmost,
@@ -305,8 +273,6 @@ public sealed class ScreenTransformService : IScreenTransformService
             0,
             flags);
 
-        // Then put the normal CryoChaos overlay after it. The most recent
-        // HWND_TOPMOST call sits above the previous topmost window.
         SetWindowPos(
             overlayHandle,
             HwndTopmost,
@@ -336,8 +302,7 @@ public sealed class ScreenTransformService : IScreenTransformService
             }
             else
             {
-                _overlay.Dispatcher.Invoke(
-                    CloseTransformWindowOnUiThread);
+                _overlay.Dispatcher.Invoke(CloseTransformWindowOnUiThread);
             }
         }
 
@@ -357,7 +322,5 @@ public sealed class ScreenTransformService : IScreenTransformService
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool ShowWindow(
-        IntPtr window,
-        int command);
+    private static extern bool ShowWindow(IntPtr window, int command);
 }
