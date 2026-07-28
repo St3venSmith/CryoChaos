@@ -471,3 +471,39 @@ public sealed class NightVisionScreenEffect : ScreenTransformEffectBase
 
     protected override ScreenTransformMode TransformMode => ScreenTransformMode.NightVision;
 }
+
+public sealed class ScreenTearEffect : ScreenTransformEffectBase
+{
+    public override ChaosEffectDefinition Definition { get; } = new()
+    {
+        Id = "screen_tear",
+        Name = "Screen Tear",
+        Description = "Rips moving horizontal bands out of alignment across the live image.",
+        Type = ChaosEffectType.ScreenTransform,
+        MinimumLevel = ChaosLevel.Normal,
+        Weight = 1,
+        DurationSeconds = 9,
+        CooldownSeconds = 105,
+        CanStack = false
+    };
+
+    protected override ScreenTransformMode TransformMode => ScreenTransformMode.ScreenTear;
+}
+
+public sealed class FrozenFrameBufferEffect : ScreenTransformEffectBase
+{
+    public override ChaosEffectDefinition Definition { get; } = new()
+    {
+        Id = "frozen_frame_buffer",
+        Name = "Buffer Stall",
+        Description = "Holds the captured frame and refreshes it only in abrupt snapshots.",
+        Type = ChaosEffectType.ScreenTransform,
+        MinimumLevel = ChaosLevel.Chaos,
+        Weight = 1,
+        DurationSeconds = 8,
+        CooldownSeconds = 130,
+        CanStack = false
+    };
+
+    protected override ScreenTransformMode TransformMode => ScreenTransformMode.FrameBufferFreeze;
+}
