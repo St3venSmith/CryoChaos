@@ -61,11 +61,6 @@ public partial class CaptureDiagnosticWindow : Window
         Closed += Window_Closed;
     }
 
-    /// <summary>
-    /// Uses the proven diagnostic preview path for a production effect. The
-    /// window begins as an ordinary preview and is promoted to a borderless,
-    /// click-through overlay only after Direct3D presents its first frame.
-    /// </summary>
     public CaptureDiagnosticWindow(
         IntPtr destinyWindow,
         IReadOnlyList<ScreenTransformMode> effectModes)
@@ -213,8 +208,6 @@ public partial class CaptureDiagnosticWindow : Window
 
         LiveRenderer.RefreshSurfaceSize();
 
-        // Install the remaining non-activation styles only after the first
-        // frame has proved that the swap chain is presenting.
         IntPtr currentStyle = GetWindowLongPtr(NativeHandle, GwlExStyle);
         long clickThroughStyle = currentStyle.ToInt64() |
                                  WsExTransparent |
@@ -236,12 +229,6 @@ public partial class CaptureDiagnosticWindow : Window
             SwpNoZOrder |
             SwpNoActivate |
             SwpFrameChanged);
-
-        // HTTRANSPARENT only forwards hit testing within this UI thread, and
-        // WS_EX_TRANSPARENT primarily affects painting order. Native-disabling
-        // the effect HWND makes Windows skip it as an input target, including
-        // its HwndHost child, while the swap chain remains visible.
-        DisableEffectWindowInput();
     }
 
     private void Window_SourceInitialized(object? sender, EventArgs e)
@@ -251,15 +238,18 @@ public partial class CaptureDiagnosticWindow : Window
 
         if (_isEffectOverlay)
         {
-            DisableEffectWindowInput();
-        }
-    }
-
-    private void DisableEffectWindowInput()
-    {
-        if (NativeHandle != IntPtr.Zero)
-        {
-            EnableWindow(NativeHandle, false);
+            // Apply click-through before Show completes so this HWND never
+            // becomes an enabled mouse target above Destiny.
+            IntPtr currentStyle =
+                GetWindowLongPtr(NativeHandle, GwlExStyle);
+            SetWindowLongPtr(
+                NativeHandle,
+                GwlExStyle,
+                new IntPtr(
+                    currentStyle.ToInt64() |
+                    WsExTransparent |
+                    WsExToolWindow |
+                    WsExNoActivate));
         }
     }
 
@@ -290,7 +280,6 @@ public partial class CaptureDiagnosticWindow : Window
         _statusTimer.Stop();
         LiveRenderer.StopCapture();
 
-
         if (_hwndSource is not null)
         {
             _hwndSource.RemoveHook(WindowProcedure);
@@ -300,12 +289,6 @@ public partial class CaptureDiagnosticWindow : Window
 
     [DllImport("user32.dll")]
     private static extern uint GetDpiForWindow(IntPtr hwnd);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool EnableWindow(
-        IntPtr hwnd,
-        [MarshalAs(UnmanagedType.Bool)] bool enable);
 
     private static IntPtr GetWindowLongPtr(IntPtr hwnd, int index) =>
         IntPtr.Size == 8
