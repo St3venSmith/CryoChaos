@@ -31,5 +31,6 @@ public enum ScreenTransformMode
     NightVision = 24,
     ScreenTear = 25,
     FrameBufferFreeze = 26,
-    PortalVoid = 27
+    PortalVoid = 27,
+    UnclearedFrameBuffer = 28
 }
