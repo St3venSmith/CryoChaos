@@ -28,5 +28,7 @@ public enum ScreenTransformMode
     ScreenShake = 21,
     MirrorTiles = 22,
     DreamBlur = 23,
-    NightVision = 24
+    NightVision = 24,
+    ScreenTear = 25,
+    FrameBufferFreeze = 26
 }
