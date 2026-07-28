@@ -1,7 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
-using System.Windows.Input;
 using System.Windows.Threading;
 using CryoChaos.Models;
 using CryoChaos.Services;
@@ -16,7 +15,6 @@ public partial class CaptureDiagnosticWindow : Window
     private const long WsExNoActivate = 0x08000000L;
     private const int WmNcHitTest = 0x0084;
     private const int WmMouseActivate = 0x0021;
-    private const int WmSetCursor = 0x0020;
     private static readonly IntPtr HtTransparent = new(-1);
     private static readonly IntPtr MaNoActivate = new(3);
     private static readonly IntPtr HwndTopmost = new(-1);
@@ -35,7 +33,6 @@ public partial class CaptureDiagnosticWindow : Window
     private DateTime _startedAt;
     private HwndSource? _hwndSource;
     private bool _promotedToOverlay;
-    private int _cursorHideCalls;
 
     public CaptureDiagnosticWindow(
         IntPtr destinyWindow,
@@ -88,8 +85,6 @@ public partial class CaptureDiagnosticWindow : Window
         ShowActivated = false;
         ShowInTaskbar = false;
         Focusable = false;
-        Cursor = Cursors.None;
-        ForceCursor = true;
 
         HelpText.Text = "Waiting for the first captured frame...";
 
@@ -218,20 +213,6 @@ public partial class CaptureDiagnosticWindow : Window
 
         LiveRenderer.RefreshSurfaceSize();
 
-        // WGC already excludes the source cursor. Hide the real Windows
-        // cursor as well while this fullscreen copy is active so a second
-        // pointer is not drawn over the transformed image. Balance every
-        // ShowCursor call when the effect window closes.
-        int cursorCount;
-        do
-        {
-            cursorCount = ShowCursor(false);
-            _cursorHideCalls++;
-        }
-        while (cursorCount >= 0 && _cursorHideCalls < 32);
-
-        SetCursor(IntPtr.Zero);
-
         // Install cross-process click-through only after the first frame has
         // proved that the swap chain is presenting. WM_NCHITTEST remains as a
         // second layer, while WS_EX_TRANSPARENT lets input reach Destiny even
@@ -284,13 +265,6 @@ public partial class CaptureDiagnosticWindow : Window
             return MaNoActivate;
         }
 
-        if (_isEffectOverlay && message == WmSetCursor)
-        {
-            SetCursor(IntPtr.Zero);
-            handled = true;
-            return new IntPtr(1);
-        }
-
         return IntPtr.Zero;
     }
 
@@ -299,11 +273,6 @@ public partial class CaptureDiagnosticWindow : Window
         _statusTimer.Stop();
         LiveRenderer.StopCapture();
 
-        while (_cursorHideCalls > 0)
-        {
-            ShowCursor(true);
-            _cursorHideCalls--;
-        }
 
         if (_hwndSource is not null)
         {
@@ -315,12 +284,6 @@ public partial class CaptureDiagnosticWindow : Window
     [DllImport("user32.dll")]
     private static extern uint GetDpiForWindow(IntPtr hwnd);
 
-    [DllImport("user32.dll")]
-    private static extern int ShowCursor(
-        [MarshalAs(UnmanagedType.Bool)] bool show);
-
-    [DllImport("user32.dll")]
-    private static extern IntPtr SetCursor(IntPtr cursor);
 
     private static IntPtr GetWindowLongPtr(IntPtr hwnd, int index) =>
         IntPtr.Size == 8
