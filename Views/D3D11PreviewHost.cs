@@ -104,6 +104,11 @@ public sealed class D3D11PreviewHost : HwndHost
             NativeMethods.WS_EX_TOOLWINDOW |
             NativeMethods.WS_EX_NOACTIVATE);
 
+        // HwndHost creates a separate native child. Disabling only the WPF
+        // parent is not sufficient because Windows can still select this
+        // child as the mouse target over Destiny.
+        NativeMethods.EnableWindow(childWindow, false);
+
         _renderer = new D3D11ScreenEffectRenderer(childWindow);
         RefreshSurfaceSize();
         return new HandleRef(this, childWindow);
