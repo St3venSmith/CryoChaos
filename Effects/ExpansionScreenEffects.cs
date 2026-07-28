@@ -150,7 +150,7 @@ public sealed class ColorBlindShuffleScreenEffect : ExpansionScreenEffectBase
 public sealed class TunnelVisionScreenEffect : ExpansionScreenEffectBase
 {
     public TunnelVisionScreenEffect() : base(
-        "tunnel_vision", "Tunnel Vision",
+        "shader_tunnel_vision", "Warp Tunnel",
         "Keeps the center sharp while the outer view twists into darkness.",
         ScreenTransformMode.TunnelVision, ChaosLevel.Chaos, 9, 110) { }
 }
