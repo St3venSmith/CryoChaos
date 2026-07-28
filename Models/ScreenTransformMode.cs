@@ -32,5 +32,20 @@ public enum ScreenTransformMode
     ScreenTear = 25,
     FrameBufferFreeze = 26,
     PortalVoid = 27,
-    UnclearedFrameBuffer = 28
+    UnclearedFrameBuffer = 28,
+    VhsTracking = 29,
+    DoubleVision = 30,
+    RadialRush = 31,
+    WaterRipple = 32,
+    SecurityCamera = 33,
+    ComicInk = 34,
+    PrismLens = 35,
+    RollingShutter = 36,
+    FrostedGlass = 37,
+    Solarize = 38,
+    CrtCurvature = 39,
+    MosaicShuffle = 40,
+    Hyperspace = 41,
+    ColorBlindShuffle = 42,
+    TunnelVision = 43
 }
