@@ -507,3 +507,21 @@ public sealed class FrozenFrameBufferEffect : ScreenTransformEffectBase
 
     protected override ScreenTransformMode TransformMode => ScreenTransformMode.FrameBufferFreeze;
 }
+
+public sealed class PortalVoidScreenEffect : ScreenTransformEffectBase
+{
+    public override ChaosEffectDefinition Definition { get; } = new()
+    {
+        Id = "portal_void",
+        Name = "Portal Void",
+        Description = "Turns the live view into a recursive Source-engine hall-of-mirrors void.",
+        Type = ChaosEffectType.ScreenTransform,
+        MinimumLevel = ChaosLevel.Chaos,
+        Weight = 1,
+        DurationSeconds = 10,
+        CooldownSeconds = 150,
+        CanStack = false
+    };
+
+    protected override ScreenTransformMode TransformMode => ScreenTransformMode.PortalVoid;
+}
