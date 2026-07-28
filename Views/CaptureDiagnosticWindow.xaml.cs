@@ -11,8 +11,10 @@ public partial class CaptureDiagnosticWindow : Window
 {
     private const int GwlExStyle = -20;
     private const long WsExTransparent = 0x00000020L;
+    private const long WsExLayered = 0x00080000L;
     private const long WsExToolWindow = 0x00000080L;
     private const long WsExNoActivate = 0x08000000L;
+    private const uint LwaAlpha = 0x00000002;
     private const int WmNcHitTest = 0x0084;
     private const int WmMouseActivate = 0x0021;
     private static readonly IntPtr HtTransparent = new(-1);
@@ -40,15 +42,10 @@ public partial class CaptureDiagnosticWindow : Window
         _destinyWindow = destinyWindow;
         _captureMonitor = captureMonitor;
         _effectModes = [ScreenTransformMode.None];
-
-        Title = captureMonitor
-            ? "CryoChaos Diagnostic - Destiny Monitor"
-            : "CryoChaos Diagnostic - Destiny Window";
-
+        Title = captureMonitor ? "CryoChaos Diagnostic - Destiny Monitor" : "CryoChaos Diagnostic - Destiny Window";
         HelpText.Text = captureMonitor
             ? "This copies the entire monitor containing Destiny. Seeing the desktop or a hall-of-mirrors effect proves Windows Graphics Capture and Direct3D rendering work."
             : "This copies only Destiny's window. A moving game image proves the game-window capture path works.";
-
         _statusTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
         _statusTimer.Tick += StatusTimer_Tick;
         Loaded += Window_Loaded;
@@ -62,7 +59,6 @@ public partial class CaptureDiagnosticWindow : Window
         _captureMonitor = false;
         _isEffectOverlay = true;
         _effectModes = NormalizeModes(effectModes);
-
         Title = "CryoChaos Live Effect Preview";
         Width = 640;
         Height = 360;
@@ -75,7 +71,6 @@ public partial class CaptureDiagnosticWindow : Window
         ShowActivated = false;
         ShowInTaskbar = false;
         Focusable = false;
-
         HelpText.Text = "Waiting for the first captured frame...";
         _statusTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
         _statusTimer.Tick += StatusTimer_Tick;
@@ -106,7 +101,6 @@ public partial class CaptureDiagnosticWindow : Window
             {
                 LiveRenderer.StartCapture(_destinyWindow, _effectModes);
             }
-
             _startedAt = DateTime.UtcNow;
             _statusTimer.Start();
             StatusTimer_Tick(this, EventArgs.Empty);
@@ -119,11 +113,7 @@ public partial class CaptureDiagnosticWindow : Window
     }
 
     private static ScreenTransformMode[] NormalizeModes(IReadOnlyList<ScreenTransformMode> modes) =>
-        modes.Where(mode => mode != ScreenTransformMode.None)
-            .Distinct()
-            .Take(2)
-            .DefaultIfEmpty(ScreenTransformMode.None)
-            .ToArray();
+        modes.Where(mode => mode != ScreenTransformMode.None).Distinct().Take(2).DefaultIfEmpty(ScreenTransformMode.None).ToArray();
 
     private void StatusTimer_Tick(object? sender, EventArgs e)
     {
@@ -131,17 +121,12 @@ public partial class CaptureDiagnosticWindow : Window
         (int captureWidth, int captureHeight) = LiveRenderer.CaptureSize;
         (int outputWidth, int outputHeight) = LiveRenderer.OutputSize;
         StatusText.Text = $"Frames: {frames:N0}   FPS: {LiveRenderer.CurrentFps:F1}   Capture: {captureWidth}x{captureHeight}   Output: {outputWidth}x{outputHeight}";
-
         bool stalled = frames == 0 && DateTime.UtcNow - _startedAt > TimeSpan.FromSeconds(3);
-        StatusText.Foreground = stalled
-            ? System.Windows.Media.Brushes.OrangeRed
-            : System.Windows.Media.Brushes.White;
-
+        StatusText.Foreground = stalled ? System.Windows.Media.Brushes.OrangeRed : System.Windows.Media.Brushes.White;
         if (stalled)
         {
             HelpText.Text = "NO FRAMES RECEIVED. Try the other capture test and check the Event log. Also use Borderless Windowed mode and keep Destiny unminimized.";
         }
-
         if (_isEffectOverlay && frames > 0 && !_promotedToOverlay)
         {
             PromoteToFullscreenOverlay();
@@ -155,7 +140,6 @@ public partial class CaptureDiagnosticWindow : Window
         DiagnosticsRow.Height = new GridLength(0);
         PreviewBorder.Margin = new Thickness(0);
         PreviewBorder.BorderThickness = new Thickness(0);
-
         NativeRect bounds = DestinyWindowService.GetMonitorBounds(_destinyWindow);
         uint dpi = GetDpiForWindow(_destinyWindow);
         double scale = (dpi == 0 ? 96.0 : dpi) / 96.0;
@@ -163,13 +147,13 @@ public partial class CaptureDiagnosticWindow : Window
         Top = bounds.Top / scale;
         Width = bounds.Width / scale;
         Height = bounds.Height / scale;
-
         SetWindowPos(NativeHandle, HwndTopmost, bounds.Left, bounds.Top, bounds.Width, bounds.Height, SwpNoActivate | SwpShowWindow);
         LiveRenderer.RefreshSurfaceSize();
 
         IntPtr currentStyle = GetWindowLongPtr(NativeHandle, GwlExStyle);
-        long clickThroughStyle = currentStyle.ToInt64() | WsExTransparent | WsExToolWindow | WsExNoActivate;
+        long clickThroughStyle = currentStyle.ToInt64() | WsExTransparent | WsExLayered | WsExToolWindow | WsExNoActivate;
         SetWindowLongPtr(NativeHandle, GwlExStyle, new IntPtr(clickThroughStyle));
+        SetLayeredWindowAttributes(NativeHandle, 0, byte.MaxValue, LwaAlpha);
         SetWindowPos(NativeHandle, IntPtr.Zero, 0, 0, 0, 0, SwpNoSize | SwpNoMove | SwpNoZOrder | SwpNoActivate | SwpFrameChanged);
     }
 
@@ -177,11 +161,11 @@ public partial class CaptureDiagnosticWindow : Window
     {
         _hwndSource = HwndSource.FromHwnd(NativeHandle);
         _hwndSource?.AddHook(WindowProcedure);
-
         if (_isEffectOverlay)
         {
             IntPtr currentStyle = GetWindowLongPtr(NativeHandle, GwlExStyle);
-            SetWindowLongPtr(NativeHandle, GwlExStyle, new IntPtr(currentStyle.ToInt64() | WsExTransparent | WsExToolWindow | WsExNoActivate));
+            SetWindowLongPtr(NativeHandle, GwlExStyle, new IntPtr(currentStyle.ToInt64() | WsExTransparent | WsExLayered | WsExToolWindow | WsExNoActivate));
+            SetLayeredWindowAttributes(NativeHandle, 0, byte.MaxValue, LwaAlpha);
         }
     }
 
@@ -192,13 +176,11 @@ public partial class CaptureDiagnosticWindow : Window
             handled = true;
             return HtTransparent;
         }
-
         if (message == WmMouseActivate)
         {
             handled = true;
             return MaNoActivate;
         }
-
         return IntPtr.Zero;
     }
 
@@ -224,15 +206,16 @@ public partial class CaptureDiagnosticWindow : Window
 
     [DllImport("user32.dll", EntryPoint = "GetWindowLongW")]
     private static extern int GetWindowLong32(IntPtr hwnd, int index);
-
     [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")]
     private static extern IntPtr GetWindowLongPtr64(IntPtr hwnd, int index);
-
     [DllImport("user32.dll", EntryPoint = "SetWindowLongW")]
     private static extern int SetWindowLong32(IntPtr hwnd, int index, int newValue);
-
     [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW")]
     private static extern IntPtr SetWindowLongPtr64(IntPtr hwnd, int index, IntPtr newValue);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetLayeredWindowAttributes(IntPtr hwnd, uint colorKey, byte alpha, uint flags);
 
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
