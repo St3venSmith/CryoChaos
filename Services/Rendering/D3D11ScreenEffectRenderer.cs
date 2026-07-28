@@ -38,7 +38,10 @@ internal sealed unsafe class D3D11ScreenEffectRenderer : IDisposable
     private ID3D11DeviceContext context = null!;
     private IDXGIFactory2 factory = null!;
     private IDXGISwapChain1 swapChain = null!;
+    private ID3D11Texture2D backBuffer = null!;
     private ID3D11RenderTargetView renderTarget = null!;
+    private ID3D11Texture2D feedbackTexture = null!;
+    private ID3D11ShaderResourceView feedbackView = null!;
     private ID3D11VertexShader vertexShader = null!;
     private ID3D11PixelShader pixelShader = null!;
     private ID3D11SamplerState sampler = null!;
@@ -192,8 +195,28 @@ internal sealed unsafe class D3D11ScreenEffectRenderer : IDisposable
 
     private void CreateBackBuffer()
     {
-        using ID3D11Texture2D backBuffer = swapChain.GetBuffer<ID3D11Texture2D>(0);
+        backBuffer = swapChain.GetBuffer<ID3D11Texture2D>(0);
         renderTarget = device.CreateRenderTargetView(backBuffer);
+        CreateFeedbackBuffer();
+    }
+
+    private void CreateFeedbackBuffer()
+    {
+        feedbackTexture = device.CreateTexture2D(new Texture2DDescription
+        {
+            Width = (uint)outputWidth,
+            Height = (uint)outputHeight,
+            MipLevels = 1,
+            ArraySize = 1,
+            Format = Format.B8G8R8A8_UNorm,
+            SampleDescription = SampleDescription.Default,
+            Usage = ResourceUsage.Default,
+            BindFlags = BindFlags.ShaderResource | BindFlags.RenderTarget
+        });
+        feedbackView = device.CreateShaderResourceView(feedbackTexture);
+        using ID3D11RenderTargetView feedbackTarget =
+            device.CreateRenderTargetView(feedbackTexture);
+        context.ClearRenderTargetView(feedbackTarget, Colors.Black);
     }
 
     public void Resize(int width, int height)
@@ -206,7 +229,10 @@ internal sealed unsafe class D3D11ScreenEffectRenderer : IDisposable
             outputWidth = width;
             outputHeight = height;
             context.ClearState();
+            feedbackView.Dispose();
+            feedbackTexture.Dispose();
             renderTarget.Dispose();
+            backBuffer.Dispose();
             swapChain.ResizeBuffers(BufferCount, (uint)width, (uint)height,
                 Format.B8G8R8A8_UNorm,
                 allowTearing ? SwapChainFlags.AllowTearing : SwapChainFlags.None).CheckError();
@@ -478,9 +504,16 @@ internal sealed unsafe class D3D11ScreenEffectRenderer : IDisposable
         // making every transform/effect look like an unchanged live copy.
         context.PSSetConstantBuffer(0, settingsBuffer);
         context.PSSetShaderResource(0, frameView);
+        context.PSSetShaderResource(1, feedbackView);
         context.PSSetSampler(0, sampler);
         context.Draw(3, 0);
         context.PSSetShaderResource(0, null!);
+        context.PSSetShaderResource(1, null!);
+
+        if (mode == ScreenTransformMode.PortalVoid)
+        {
+            context.CopyResource(feedbackTexture, backBuffer);
+        }
 
         swapChain.Present(0, allowTearing ? PresentFlags.AllowTearing : PresentFlags.None);
 
@@ -524,6 +557,9 @@ internal sealed unsafe class D3D11ScreenEffectRenderer : IDisposable
             DisposeSafely(pixelShader, "pixel shader");
             DisposeSafely(vertexShader, "vertex shader");
             DisposeSafely(renderTarget, "render target");
+            DisposeSafely(feedbackView, "feedback shader view");
+            DisposeSafely(feedbackTexture, "feedback texture");
+            DisposeSafely(backBuffer, "swap-chain back buffer");
             DisposeSafely(swapChain, "swap chain");
             DisposeSafely(factory, "DXGI factory");
             DisposeSafely(context, "D3D context");
