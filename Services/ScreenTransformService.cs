@@ -107,6 +107,10 @@ public sealed class ScreenTransformService : IScreenTransformService
                 ScreenTransformMode[] activeModes = GetActiveModes();
                 if (_transformWindow is null)
                 {
+                    bool restoreDestinyFocus =
+                        ForegroundWindowService.IsWindowForeground(
+                            destinyWindow);
+
                     CaptureDiagnosticWindow window = new(
                         destinyWindow,
                         activeModes);
@@ -116,6 +120,18 @@ public sealed class ScreenTransformService : IScreenTransformService
                     }
 
                     window.Show();
+
+                    // Creating a WPF/HwndHost window can briefly transfer the
+                    // foreground queue even with WS_EX_NOACTIVATE. Restore
+                    // Destiny only when it owned focus before the effect, so
+                    // an intentional Alt+Tab is never overridden.
+                    if (restoreDestinyFocus &&
+                        !ForegroundWindowService.IsWindowForeground(
+                            destinyWindow))
+                    {
+                        ForegroundWindowService.TryActivateDestinyWindow();
+                    }
+
                     _zOrderTimer.Start();
                 }
                 else
