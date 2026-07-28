@@ -8,10 +8,6 @@ using CryoChaos.Services.Rendering;
 
 namespace CryoChaos.Views;
 
-/// <summary>
-/// Native child HWND used exclusively by the low-latency DXGI swap chain.
-/// WPF never copies or transforms captured pixels.
-/// </summary>
 public sealed class D3D11PreviewHost : HwndHost
 {
     private const int WmNcHitTest = 0x0084;
@@ -22,17 +18,13 @@ public sealed class D3D11PreviewHost : HwndHost
 
     public double CurrentFps => _renderer?.CurrentFps ?? 0;
     public long PresentedFrames => _renderer?.PresentedFrames ?? 0;
-    public (int Width, int Height) CaptureSize =>
-        _renderer?.CaptureSize ?? (0, 0);
-    public (int Width, int Height) OutputSize =>
-        _renderer?.OutputSize ?? (0, 0);
+    public (int Width, int Height) CaptureSize => _renderer?.CaptureSize ?? (0, 0);
+    public (int Width, int Height) OutputSize => _renderer?.OutputSize ?? (0, 0);
 
-    public void StartCapture(IntPtr sourceWindow, ScreenTransformMode mode)
-        => StartCapture(sourceWindow, [mode]);
+    public void StartCapture(IntPtr sourceWindow, ScreenTransformMode mode) =>
+        StartCapture(sourceWindow, [mode]);
 
-    public void StartCapture(
-        IntPtr sourceWindow,
-        IReadOnlyList<ScreenTransformMode> modes)
+    public void StartCapture(IntPtr sourceWindow, IReadOnlyList<ScreenTransformMode> modes)
     {
         if (_renderer is null)
         {
@@ -40,16 +32,8 @@ public sealed class D3D11PreviewHost : HwndHost
                 "The Direct3D preview surface has not been created yet.");
         }
 
-        // BuildWindowCore can run before WPF has completed the first layout
-        // pass.  In that case the native host and its swap chain are born at
-        // 1x1 and OnWindowPositionChanged may already have fired before the
-        // renderer was assigned.  Read the final HWND client size here so the
-        // first captured frame is presented to a visible back buffer.
         RefreshSurfaceSize();
         _renderer.StartCapture(sourceWindow, modes);
-
-        // WPF can perform one more HwndHost arrange after Loaded.  Re-read the
-        // native pixel size on the dispatcher instead of guessing from DIPs.
         Dispatcher.BeginInvoke(RefreshSurfaceSize);
     }
 
@@ -58,9 +42,7 @@ public sealed class D3D11PreviewHost : HwndHost
     public void SetEffectModes(IReadOnlyList<ScreenTransformMode> modes) =>
         _renderer?.SetEffectModes(modes);
 
-    public void StartMonitorCapture(
-        IntPtr monitor,
-        ScreenTransformMode mode)
+    public void StartMonitorCapture(IntPtr monitor, ScreenTransformMode mode)
     {
         if (_renderer is null)
         {
@@ -82,6 +64,10 @@ public sealed class D3D11PreviewHost : HwndHost
                           NativeMethods.WS_VISIBLE |
                           NativeMethods.WS_CLIPCHILDREN |
                           NativeMethods.WS_CLIPSIBLINGS,
+            ExtendedWindowStyle =
+                NativeMethods.WS_EX_TRANSPARENT |
+                NativeMethods.WS_EX_TOOLWINDOW |
+                NativeMethods.WS_EX_NOACTIVATE,
             Width = Math.Max(1, (int)ActualWidth),
             Height = Math.Max(1, (int)ActualHeight)
         };
@@ -94,20 +80,13 @@ public sealed class D3D11PreviewHost : HwndHost
             childWindow,
             NativeMethods.GWL_EXSTYLE);
 
-        // The top-level transform window is already click-through. Applying
-        // WS_EX_TRANSPARENT to a DXGI presentation HWND can postpone its paint
-        // behind siblings and make the swap-chain output appear missing.
         NativeMethods.SetWindowLong(
             childWindow,
             NativeMethods.GWL_EXSTYLE,
             style |
+            NativeMethods.WS_EX_TRANSPARENT |
             NativeMethods.WS_EX_TOOLWINDOW |
             NativeMethods.WS_EX_NOACTIVATE);
-
-        // HwndHost creates a separate native child. Disabling only the WPF
-        // parent is not sufficient because Windows can still select this
-        // child as the mouse target over Destiny.
-        NativeMethods.EnableWindow(childWindow, false);
 
         _renderer = new D3D11ScreenEffectRenderer(childWindow);
         RefreshSurfaceSize();
@@ -125,8 +104,6 @@ public sealed class D3D11PreviewHost : HwndHost
         }
         catch (Exception exception)
         {
-            // HwndHost invokes this asynchronously during native teardown.
-            // Cleanup must never escape into the WPF dispatcher.
             CrashLogService.WriteException(
                 "PREVIEW HOST RENDERER CLEANUP",
                 exception);
@@ -168,9 +145,7 @@ public sealed class D3D11PreviewHost : HwndHost
         }
 
         IntPtr childWindow = _childSource.Handle;
-        if (!NativeMethods.GetClientRect(
-                childWindow,
-                out NativeRect clientRectangle))
+        if (!NativeMethods.GetClientRect(childWindow, out NativeRect clientRectangle))
         {
             return;
         }
