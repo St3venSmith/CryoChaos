@@ -119,7 +119,7 @@ public sealed class FastMouseSensitivityEffect : RawMouseChaosEffectBase
     {
         Id = "raw_fast_sensitivity",
         Name = "Hyper Sensitivity",
-        Description = "Raises physical mouse sensitivity to 1.75x.",
+        Description = "Raises physical mouse sensitivity to 1.4x.",
         Type = ChaosEffectType.Keybind,
         MinimumLevel = ChaosLevel.Normal,
         Weight = 5,
@@ -130,8 +130,8 @@ public sealed class FastMouseSensitivityEffect : RawMouseChaosEffectBase
 
     protected override RawMouseEffectMode Mode =>
         RawMouseEffectMode.Scale;
-    protected override double SensitivityMultiplier => 1.75;
-    protected override int BaseOutputLimit => 240;
+    protected override double SensitivityMultiplier => 1.4;
+    protected override int BaseOutputLimit => 140;
 }
 
 public sealed class SlowMouseSensitivityEffect : RawMouseChaosEffectBase
@@ -140,7 +140,7 @@ public sealed class SlowMouseSensitivityEffect : RawMouseChaosEffectBase
     {
         Id = "raw_slow_sensitivity",
         Name = "Sluggish Aim",
-        Description = "Lowers physical mouse sensitivity to 0.45x.",
+        Description = "Lowers physical mouse sensitivity to 0.7x.",
         Type = ChaosEffectType.Keybind,
         MinimumLevel = ChaosLevel.Normal,
         Weight = 5,
@@ -151,8 +151,8 @@ public sealed class SlowMouseSensitivityEffect : RawMouseChaosEffectBase
 
     protected override RawMouseEffectMode Mode =>
         RawMouseEffectMode.Scale;
-    protected override double SensitivityMultiplier => 0.45;
-    protected override int BaseOutputLimit => 240;
+    protected override double SensitivityMultiplier => 0.7;
+    protected override int BaseOutputLimit => 140;
 }
 
 public sealed class InvertHorizontalCameraEffect : RawMouseChaosEffectBase
@@ -200,7 +200,7 @@ public sealed class MouseMomentumEffect : RawMouseChaosEffectBase
         "raw_mouse_momentum", "Aim Momentum",
         "Mouse movement keeps gliding after the physical mouse stops.", 16, 65);
     protected override RawMouseEffectMode Mode => RawMouseEffectMode.Momentum;
-    protected override int BaseOutputLimit => 300;
+    protected override int BaseOutputLimit => 120;
     private static ChaosEffectDefinition PhysicsDefinition(string id, string name, string description, int duration, int cooldown) =>
         MousePhysicsDefinitions.Create(id, name, description, duration, cooldown);
 }
@@ -211,7 +211,7 @@ public sealed class MouseElasticEffect : RawMouseChaosEffectBase
         "raw_mouse_elastic", "Rubber Aim",
         "Camera movement overshoots and springs back like elastic.", 15, 70);
     protected override RawMouseEffectMode Mode => RawMouseEffectMode.Elastic;
-    protected override int BaseOutputLimit => 340;
+    protected override int BaseOutputLimit => 140;
 }
 
 public sealed class MouseGravityEffect : RawMouseChaosEffectBase
@@ -220,7 +220,7 @@ public sealed class MouseGravityEffect : RawMouseChaosEffectBase
         "raw_mouse_gravity", "Heavy Crosshair",
         "A constant downward force drags the camera.", 16, 60);
     protected override RawMouseEffectMode Mode => RawMouseEffectMode.Gravity;
-    protected override int BaseOutputLimit => 120;
+    protected override int BaseOutputLimit => 45;
 }
 
 public sealed class MouseMagnetEffect : RawMouseChaosEffectBase
@@ -229,7 +229,7 @@ public sealed class MouseMagnetEffect : RawMouseChaosEffectBase
         "raw_mouse_magnet", "Magnetic Aim",
         "Camera movement is pulled back toward its starting center.", 15, 70);
     protected override RawMouseEffectMode Mode => RawMouseEffectMode.Magnet;
-    protected override int BaseOutputLimit => 260;
+    protected override int BaseOutputLimit => 100;
 }
 
 public sealed class MouseOrbitEffect : RawMouseChaosEffectBase
@@ -239,16 +239,16 @@ public sealed class MouseOrbitEffect : RawMouseChaosEffectBase
         "The camera is continuously pushed around a circular path.", 14, 75,
         ChaosLevel.Chaos);
     protected override RawMouseEffectMode Mode => RawMouseEffectMode.Orbit;
-    protected override int BaseOutputLimit => 120;
+    protected override int BaseOutputLimit => 45;
 }
 
 public sealed class MouseDeadzoneEffect : RawMouseChaosEffectBase
 {
     public override ChaosEffectDefinition Definition { get; } = MousePhysicsDefinitions.Create(
-        "raw_mouse_deadzone", "Twenty Pixel Tax",
-        "The first 20 counts of each mouse movement are ignored.", 16, 65);
+        "raw_mouse_deadzone", "Eight Count Tax",
+        "The first 8 counts of each mouse movement are ignored.", 16, 65);
     protected override RawMouseEffectMode Mode => RawMouseEffectMode.Deadzone;
-    protected override int BaseOutputLimit => 280;
+    protected override int BaseOutputLimit => 120;
 }
 
 public sealed class MouseWindEffect : RawMouseChaosEffectBase
@@ -257,7 +257,7 @@ public sealed class MouseWindEffect : RawMouseChaosEffectBase
         "raw_mouse_wind", "Crosswind",
         "Smooth random gusts push the camera in changing directions.", 16, 60);
     protected override RawMouseEffectMode Mode => RawMouseEffectMode.Wind;
-    protected override int BaseOutputLimit => 140;
+    protected override int BaseOutputLimit => 50;
 }
 
 public sealed class MouseFrictionEffect : RawMouseChaosEffectBase
@@ -266,7 +266,7 @@ public sealed class MouseFrictionEffect : RawMouseChaosEffectBase
         "raw_mouse_friction", "Breaking Loose",
         "Mouse movement starts extremely slow and accelerates over time.", 18, 65);
     protected override RawMouseEffectMode Mode => RawMouseEffectMode.Friction;
-    protected override int BaseOutputLimit => 300;
+    protected override int BaseOutputLimit => 120;
 }
 
 internal static class MousePhysicsDefinitions
