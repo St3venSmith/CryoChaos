@@ -160,24 +160,12 @@ float4 PSMain(VertexOutput input) : SV_TARGET
             LinearSampler,
             uv).rgb;
 
-        // A real uncleared buffer does not blend or brighten old pixels: a
-        // fragment either overwrites a location or that location keeps its
-        // exact prior value. Use hard, changing redraw regions to reproduce
-        // that behavior without fading or sampling neighboring coordinates.
-        float2 redrawCell = floor(input.Position.xy / float2(48.0, 12.0));
-        float redrawPass = floor(EffectTime * 7.0);
-        float redrawNoise = RandomNoise(
-            redrawCell + float2(redrawPass * 13.0, redrawPass * 5.0));
-        float writeNewFrame = step(0.34, redrawNoise);
-
-        // Seed the feedback texture with one complete frame before holes in
-        // the simulated redraw begin appearing.
-        if (EffectTime < 0.12)
-            writeNewFrame = 1.0;
-
-        color.rgb = writeNewFrame >= 1.0
-            ? color.rgb
-            : previous;
+        // Overlay the incoming frame onto history at the exact same pixel
+        // coordinates. This creates smooth temporal persistence with no
+        // block mask, no neighbor sampling, and no additive brightening.
+        // A very low write opacity makes old frames remain visibly stacked.
+        float writeOpacity = EffectTime < 0.12 ? 1.0 : 0.008;
+        color.rgb = lerp(previous, color.rgb, writeOpacity);
     }
 
     if (mode == 23)                                               // dream blur
