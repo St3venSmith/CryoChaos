@@ -510,7 +510,8 @@ internal sealed unsafe class D3D11ScreenEffectRenderer : IDisposable
         context.PSSetShaderResource(0, null!);
         context.PSSetShaderResource(1, null!);
 
-        if (mode == ScreenTransformMode.PortalVoid)
+        if (mode is ScreenTransformMode.PortalVoid or
+            ScreenTransformMode.UnclearedFrameBuffer)
         {
             context.CopyResource(feedbackTexture, backBuffer);
         }
