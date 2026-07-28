@@ -160,12 +160,24 @@ float4 PSMain(VertexOutput input) : SV_TARGET
             LinearSampler,
             uv).rgb;
 
-        // Preserve framebuffer data only at the exact same pixel coordinate.
-        // Nothing decays and no neighboring pixels are sampled, so the old
-        // buffer is written over in place without any artificial spreading.
-        float3 writtenOver = max(previous, color.rgb);
-        float startup = smoothstep(0.04, 0.30, EffectTime);
-        color.rgb = lerp(color.rgb, saturate(writtenOver), startup);
+        // A real uncleared buffer does not blend or brighten old pixels: a
+        // fragment either overwrites a location or that location keeps its
+        // exact prior value. Use hard, changing redraw regions to reproduce
+        // that behavior without fading or sampling neighboring coordinates.
+        float2 redrawCell = floor(input.Position.xy / float2(48.0, 12.0));
+        float redrawPass = floor(EffectTime * 7.0);
+        float redrawNoise = RandomNoise(
+            redrawCell + float2(redrawPass * 13.0, redrawPass * 5.0));
+        float writeNewFrame = step(0.34, redrawNoise);
+
+        // Seed the feedback texture with one complete frame before holes in
+        // the simulated redraw begin appearing.
+        if (EffectTime < 0.12)
+            writeNewFrame = 1.0;
+
+        color.rgb = writeNewFrame >= 1.0
+            ? color.rgb
+            : previous;
     }
 
     if (mode == 23)                                               // dream blur
