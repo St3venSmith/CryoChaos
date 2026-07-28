@@ -65,6 +65,7 @@ internal sealed unsafe class D3D11ScreenEffectRenderer : IDisposable
     private double currentFps;
     private long previousFrameTimestamp;
     private double renderCredits = 1.0;
+    private long lastFrozenFrameBucket = -1;
 
     public D3D11ScreenEffectRenderer(IntPtr hwnd)
     {
@@ -84,6 +85,7 @@ internal sealed unsafe class D3D11ScreenEffectRenderer : IDisposable
             {
                 mode = value;
                 effectClock.Restart();
+                lastFrozenFrameBucket = -1;
             }
         }
     }
@@ -248,6 +250,7 @@ internal sealed unsafe class D3D11ScreenEffectRenderer : IDisposable
         captureFaulted = false;
         previousFrameTimestamp = 0;
         renderCredits = 1.0;
+        lastFrozenFrameBucket = -1;
         captureItem = item;
         sourceWidth = captureItem.Size.Width;
         sourceHeight = captureItem.Size.Height;
@@ -381,6 +384,21 @@ internal sealed unsafe class D3D11ScreenEffectRenderer : IDisposable
 
     private bool ShouldRenderFrame()
     {
+        if (mode == ScreenTransformMode.FrameBufferFreeze)
+        {
+            // Present one fresh capture, then deliberately retain that swap-
+            // chain frame until the next bucket. This is an actual held frame,
+            // not a blur or shader approximation of one.
+            long bucket = (long)(effectClock.Elapsed.TotalSeconds / 1.25);
+            if (bucket == lastFrozenFrameBucket)
+            {
+                return false;
+            }
+
+            lastFrozenFrameBucket = bucket;
+            return true;
+        }
+
         long timestamp = Stopwatch.GetTimestamp();
 
         if (previousFrameTimestamp != 0)
