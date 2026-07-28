@@ -1,4 +1,5 @@
 Texture2D CaptureTexture : register(t0);
+Texture2D PreviousFrameTexture : register(t1);
 SamplerState LinearSampler : register(s0);
 
 cbuffer EffectSettings : register(b0)
@@ -134,6 +135,25 @@ float4 PSMain(VertexOutput input) : SV_TARGET
     }
 
     float4 color = CaptureTexture.Sample(LinearSampler, uv);
+
+    if (mode == 27)                                               // Source-style hall of mirrors
+    {
+        float2 centered = uv - 0.5;
+        float2 feedbackUv = 0.5 + centered * 0.972;
+        feedbackUv += float2(
+            sin(EffectTime * 0.83),
+            cos(EffectTime * 0.69)) * 0.0015;
+        float3 previous = PreviousFrameTexture.Sample(
+            LinearSampler,
+            saturate(feedbackUv)).rgb;
+        float edgeVoid = smoothstep(0.68, 0.40, length(centered));
+        float3 recursiveTrail = saturate(
+            previous * float3(0.985, 0.975, 1.0) +
+            color.rgb * 0.20);
+        recursiveTrail *= lerp(0.72, 1.0, edgeVoid);
+        float feedbackAmount = smoothstep(0.08, 0.45, EffectTime);
+        color.rgb = lerp(color.rgb, recursiveTrail, feedbackAmount * 0.88);
+    }
 
     if (mode == 23)                                               // dream blur
     {
