@@ -73,8 +73,8 @@ public sealed class PulsingSensitivityMouseEffect : ExpansionMouseEffectBase
 {
     public PulsingSensitivityMouseEffect() : base(
         "raw_sensitivity_pulse", "Sensitivity Tide",
-        "Sensitivity slowly breathes between 0.82x and 1.18x.",
-        RawMouseEffectMode.SensitivityPulse, 80) { }
+        "Sensitivity slowly breathes between 0.6x and 1.5x.",
+        RawMouseEffectMode.SensitivityPulse, 180) { }
 }
 
 public sealed class MouseEchoEffect : ExpansionMouseEffectBase
