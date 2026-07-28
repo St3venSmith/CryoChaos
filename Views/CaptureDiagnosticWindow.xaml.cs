@@ -30,7 +30,7 @@ public partial class CaptureDiagnosticWindow : Window
     private readonly IntPtr _destinyWindow;
     private readonly bool _captureMonitor;
     private readonly bool _isEffectOverlay;
-    private readonly ScreenTransformMode _effectMode;
+    private ScreenTransformMode[] _effectModes;
     private readonly DispatcherTimer _statusTimer;
     private DateTime _startedAt;
     private HwndSource? _hwndSource;
@@ -44,7 +44,7 @@ public partial class CaptureDiagnosticWindow : Window
         InitializeComponent();
         _destinyWindow = destinyWindow;
         _captureMonitor = captureMonitor;
-        _effectMode = ScreenTransformMode.None;
+        _effectModes = [ScreenTransformMode.None];
 
         Title = captureMonitor
             ? "CryoChaos Diagnostic - Destiny Monitor"
@@ -71,13 +71,13 @@ public partial class CaptureDiagnosticWindow : Window
     /// </summary>
     public CaptureDiagnosticWindow(
         IntPtr destinyWindow,
-        ScreenTransformMode effectMode)
+        IReadOnlyList<ScreenTransformMode> effectModes)
     {
         InitializeComponent();
         _destinyWindow = destinyWindow;
         _captureMonitor = false;
         _isEffectOverlay = true;
-        _effectMode = effectMode;
+        _effectModes = NormalizeModes(effectModes);
 
         Title = "CryoChaos Live Effect Preview";
         Width = 640;
@@ -106,6 +106,12 @@ public partial class CaptureDiagnosticWindow : Window
 
     public IntPtr NativeHandle => new WindowInteropHelper(this).Handle;
 
+    public void SetEffectModes(IReadOnlyList<ScreenTransformMode> modes)
+    {
+        _effectModes = NormalizeModes(modes);
+        LiveRenderer.SetEffectModes(_effectModes);
+    }
+
     private void Window_Loaded(object sender, RoutedEventArgs e)
     {
         try
@@ -124,7 +130,7 @@ public partial class CaptureDiagnosticWindow : Window
             {
                 LiveRenderer.StartCapture(
                     _destinyWindow,
-                    _effectMode);
+                    _effectModes);
             }
 
             _startedAt = DateTime.UtcNow;
@@ -137,6 +143,15 @@ public partial class CaptureDiagnosticWindow : Window
             StatusText.Foreground = System.Windows.Media.Brushes.OrangeRed;
         }
     }
+
+    private static ScreenTransformMode[] NormalizeModes(
+        IReadOnlyList<ScreenTransformMode> modes) =>
+        modes
+            .Where(mode => mode != ScreenTransformMode.None)
+            .Distinct()
+            .Take(2)
+            .DefaultIfEmpty(ScreenTransformMode.None)
+            .ToArray();
 
     private void StatusTimer_Tick(object? sender, EventArgs e)
     {
