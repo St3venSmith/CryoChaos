@@ -144,8 +144,7 @@
                           Content="Edit over game"
                           VerticalAlignment="Center"
                           Margin="0,0,12,0"
-                          Checked="EditOverGameCheckBox_Changed"
-                          Unchecked="EditOverGameCheckBox_Changed" />
+                          Click="EditOverGameCheckBox_Changed" />
                 <Button Content="Play Destiny"
                         Click="PlayDestinyButton_Click"
                         Style="{StaticResource SecondaryButtonStyle}" />
