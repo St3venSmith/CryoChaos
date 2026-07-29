@@ -22,11 +22,10 @@ public partial class ScreenFilterLabWindow : Window
         InitializeComponent();
 
         ScreenTransformMode[] modes =
-            Enum.GetValues<ScreenTransformMode>();
-        PrimaryEffectComboBox.ItemsSource = modes;
-        SecondaryEffectComboBox.ItemsSource = modes;
-        PrimaryEffectComboBox.SelectedItem = ScreenTransformMode.None;
-        SecondaryEffectComboBox.SelectedItem = ScreenTransformMode.None;
+            Enum.GetValues<ScreenTransformMode>()
+                .Where(mode => mode != ScreenTransformMode.None)
+                .ToArray();
+        EffectStackListBox.ItemsSource = modes;
 
         LoadProfile();
         _ready = true;
@@ -59,11 +58,19 @@ public partial class ScreenFilterLabWindow : Window
             StatusTextBlock.Text =
                 "Running persistently — click-through and non-activating";
 
-            // Only the native render surface belongs above Destiny. The lab
-            // is a normal control window and must immediately yield keyboard
-            // and mouse focus so the game can keep receiving input.
-            Topmost = false;
-            ForegroundWindowService.TryActivateDestinyWindow();
+            if (EditOverGameCheckBox.IsChecked == true)
+            {
+                // Bring the controls above the click-through render surface
+                // while the user edits. Destiny remains visible underneath.
+                Topmost = true;
+                Activate();
+            }
+            else
+            {
+                // In play mode only the native surface remains topmost.
+                Topmost = false;
+                ForegroundWindowService.TryActivateDestinyWindow();
+            }
         }
         catch (Exception exception)
         {
@@ -80,6 +87,26 @@ public partial class ScreenFilterLabWindow : Window
 
     private void StopButton_Click(object sender, RoutedEventArgs e) =>
         StopOverlay();
+
+    private void EditOverGameCheckBox_Changed(
+        object sender,
+        RoutedEventArgs e)
+    {
+        Topmost = EditOverGameCheckBox.IsChecked == true;
+        if (Topmost)
+        {
+            Activate();
+        }
+    }
+
+    private void PlayDestinyButton_Click(
+        object sender,
+        RoutedEventArgs e)
+    {
+        EditOverGameCheckBox.IsChecked = false;
+        Topmost = false;
+        ForegroundWindowService.TryActivateDestinyWindow();
+    }
 
     private void StopOverlay()
     {
@@ -102,19 +129,8 @@ public partial class ScreenFilterLabWindow : Window
 
     private IReadOnlyList<ScreenTransformMode> GetEffectModes()
     {
-        ScreenTransformMode primary =
-            PrimaryEffectComboBox.SelectedItem is ScreenTransformMode first
-                ? first
-                : ScreenTransformMode.None;
-        ScreenTransformMode secondary =
-            SecondaryEffectComboBox.SelectedItem is ScreenTransformMode second
-                ? second
-                : ScreenTransformMode.None;
-
-        ScreenTransformMode[] selected = [primary, secondary];
-        ScreenTransformMode[] active = selected
-            .Where(mode => mode != ScreenTransformMode.None)
-            .Distinct()
+        ScreenTransformMode[] active = EffectStackListBox.SelectedItems
+            .Cast<ScreenTransformMode>()
             .ToArray();
 
         return active.Length == 0
@@ -174,12 +190,9 @@ public partial class ScreenFilterLabWindow : Window
             Directory.CreateDirectory(
                 Path.GetDirectoryName(ProfilePath)!);
             ScreenFilterProfile profile = new(
-                PrimaryEffectComboBox.SelectedItem is ScreenTransformMode primary
-                    ? primary
-                    : ScreenTransformMode.None,
-                SecondaryEffectComboBox.SelectedItem is ScreenTransformMode secondary
-                    ? secondary
-                    : ScreenTransformMode.None,
+                GetEffectModes()
+                    .Where(mode => mode != ScreenTransformMode.None)
+                    .ToArray(),
                 GetSettings());
             File.WriteAllText(
                 ProfilePath,
@@ -213,8 +226,11 @@ public partial class ScreenFilterLabWindow : Window
                 return;
             }
 
-            PrimaryEffectComboBox.SelectedItem = profile.Primary;
-            SecondaryEffectComboBox.SelectedItem = profile.Secondary;
+            EffectStackListBox.UnselectAll();
+            foreach (ScreenTransformMode mode in profile.Modes)
+            {
+                EffectStackListBox.SelectedItems.Add(mode);
+            }
             ApplySettings(profile.Settings);
         }
         catch (Exception exception)
@@ -227,7 +243,6 @@ public partial class ScreenFilterLabWindow : Window
     }
 
     private sealed record ScreenFilterProfile(
-        ScreenTransformMode Primary,
-        ScreenTransformMode Secondary,
+        ScreenTransformMode[] Modes,
         ScreenFilterSettings Settings);
 }
