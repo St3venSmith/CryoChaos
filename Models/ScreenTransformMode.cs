@@ -47,5 +47,6 @@ public enum ScreenTransformMode
     MosaicShuffle = 40,
     Hyperspace = 41,
     ColorBlindShuffle = 42,
-    TunnelVision = 43
+    TunnelVision = 43,
+    MotionEcho = 44
 }
