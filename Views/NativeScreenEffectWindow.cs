@@ -22,10 +22,19 @@ internal sealed class NativeScreenEffectWindow : IDisposable
 
     private D3D11ScreenEffectRenderer? _renderer;
 
-    public NativeScreenEffectWindow(IntPtr destinyWindow, IReadOnlyList<ScreenTransformMode> modes)
+    public NativeScreenEffectWindow(
+        IntPtr destinyWindow,
+        IReadOnlyList<ScreenTransformMode> modes)
     {
-        NativeRect bounds = DestinyWindowService.GetMonitorBounds(destinyWindow);
-        int extendedStyle = WsExTopmost | WsExTransparent | WsExToolWindow | WsExLayered | WsExNoActivate;
+        NativeRect bounds =
+            DestinyWindowService.GetMonitorBounds(destinyWindow);
+
+        int extendedStyle =
+            WsExTopmost |
+            WsExTransparent |
+            WsExToolWindow |
+            WsExLayered |
+            WsExNoActivate;
 
         NativeHandle = CreateWindowEx(
             extendedStyle,
@@ -43,12 +52,18 @@ internal sealed class NativeScreenEffectWindow : IDisposable
 
         if (NativeHandle == IntPtr.Zero)
         {
-            throw new InvalidOperationException($"Could not create the native effect window. Win32 error={Marshal.GetLastWin32Error()}.");
+            throw new InvalidOperationException(
+                $"Could not create the native effect window. Win32 error={Marshal.GetLastWin32Error()}.");
         }
 
         try
         {
-            SetLayeredWindowAttributes(NativeHandle, 0, byte.MaxValue, LwaAlpha);
+            SetLayeredWindowAttributes(
+                NativeHandle,
+                0,
+                byte.MaxValue,
+                LwaAlpha);
+
             _renderer = new D3D11ScreenEffectRenderer(NativeHandle);
             _renderer.Resize(bounds.Width, bounds.Height);
             _renderer.StartCapture(destinyWindow, modes);
@@ -63,9 +78,15 @@ internal sealed class NativeScreenEffectWindow : IDisposable
 
     public IntPtr NativeHandle { get; private set; }
 
-    public bool IsVisible => NativeHandle != IntPtr.Zero && IsWindowVisible(NativeHandle);
+    public bool IsVisible =>
+        NativeHandle != IntPtr.Zero &&
+        IsWindowVisible(NativeHandle);
 
-    public void SetEffectModes(IReadOnlyList<ScreenTransformMode> modes) => _renderer?.SetEffectModes(modes);
+    public void SetEffectModes(IReadOnlyList<ScreenTransformMode> modes) =>
+        _renderer?.SetEffectModes(modes);
+
+    public void SetFilterSettings(ScreenFilterSettings settings) =>
+        _renderer?.SetFilterSettings(settings);
 
     public void Close() => Dispose();
 
@@ -73,13 +94,16 @@ internal sealed class NativeScreenEffectWindow : IDisposable
     {
         D3D11ScreenEffectRenderer? renderer = _renderer;
         _renderer = null;
+
         try
         {
             renderer?.Dispose();
         }
         catch (Exception exception)
         {
-            CrashLogService.WriteException("NATIVE SCREEN EFFECT RENDERER CLEANUP", exception);
+            CrashLogService.WriteException(
+                "NATIVE SCREEN EFFECT RENDERER CLEANUP",
+                exception);
         }
 
         IntPtr window = NativeHandle;
@@ -93,7 +117,11 @@ internal sealed class NativeScreenEffectWindow : IDisposable
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
     private static extern IntPtr GetModuleHandle(string? moduleName);
 
-    [DllImport("user32.dll", EntryPoint = "CreateWindowExW", CharSet = CharSet.Unicode, SetLastError = true)]
+    [DllImport(
+        "user32.dll",
+        EntryPoint = "CreateWindowExW",
+        CharSet = CharSet.Unicode,
+        SetLastError = true)]
     private static extern IntPtr CreateWindowEx(
         int extendedStyle,
         string className,
@@ -110,7 +138,11 @@ internal sealed class NativeScreenEffectWindow : IDisposable
 
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool SetLayeredWindowAttributes(IntPtr window, uint colorKey, byte alpha, uint flags);
+    private static extern bool SetLayeredWindowAttributes(
+        IntPtr window,
+        uint colorKey,
+        byte alpha,
+        uint flags);
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
