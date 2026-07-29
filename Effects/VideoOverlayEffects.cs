@@ -56,3 +56,31 @@ public sealed class YourVideoOverlayEffect : VideoOverlayChaosEffectBase
     protected override Stretch VideoStretch => Stretch.Uniform;
     protected override bool Loop => false;
 }
+
+/// <summary>
+/// Full-screen fake error-code video. Put the source video at
+/// Videos/fake-error-code.mp4; it is copied beside the built application.
+/// </summary>
+public sealed class FakeErrorCodeVideoEffect : VideoOverlayChaosEffectBase
+{
+    public override ChaosEffectDefinition Definition { get; } = new()
+    {
+        Id = "fake_error_code_video",
+        Name = "Fake Error Code",
+        Description = "Covers Destiny with a click-through fake error-code video and its audio.",
+        Type = ChaosEffectType.Graphic,
+        MinimumLevel = ChaosLevel.Chaos,
+        Weight = 35,
+        DurationSeconds = 15,
+        CooldownSeconds = 150,
+        CanStack = false
+    };
+
+    protected override string VideoPath =>
+        "Videos/fake-error-code.mp4";
+    protected override double VideoOpacity => 1.0;
+    protected override double Volume => 1.0;
+    protected override Stretch VideoStretch =>
+        Stretch.UniformToFill;
+    protected override bool Loop => false;
+}
