@@ -8,6 +8,18 @@ cbuffer EffectSettings : register(b0)
     float EffectTime;
     float SourceWidth;
     float SourceHeight;
+    float Exposure;
+    float Contrast;
+    float Saturation;
+    float HueRadians;
+    float Temperature;
+    float Tint;
+    float Gamma;
+    float Vignette;
+    float RedMultiplier;
+    float GreenMultiplier;
+    float BlueMultiplier;
+    float ApplyColorSettings;
 };
 
 struct VertexOutput
@@ -406,5 +418,32 @@ float4 PSMain(VertexOutput input) : SV_TARGET
         color.rgb *= lerp(0.10, 1.0, mask);
     }
 
-    return float4(color.rgb, 1.0);
+    if (ApplyColorSettings > 0.5)
+    {
+        color.rgb *= exp2(Exposure);
+        color.rgb = (color.rgb - 0.5) * Contrast + 0.5;
+
+        float luminance = dot(color.rgb, float3(0.2126, 0.7152, 0.0722));
+        color.rgb = lerp(luminance.xxx, color.rgb, Saturation);
+
+        const float3 hueAxis = float3(0.57735027, 0.57735027, 0.57735027);
+        float hueSine = sin(HueRadians);
+        float hueCosine = cos(HueRadians);
+        color.rgb =
+            color.rgb * hueCosine +
+            cross(hueAxis, color.rgb) * hueSine +
+            hueAxis * dot(hueAxis, color.rgb) * (1.0 - hueCosine);
+
+        color.rgb += float3(
+            Temperature * 0.12 + Tint * 0.025,
+            Tint * 0.10,
+            -Temperature * 0.12 + Tint * 0.025);
+        color.rgb *= float3(RedMultiplier, GreenMultiplier, BlueMultiplier);
+        color.rgb = pow(max(color.rgb, 0.0), 1.0 / max(Gamma, 0.05));
+
+        float edge = smoothstep(0.18, 0.72, length(uv - 0.5));
+        color.rgb *= 1.0 - edge * Vignette * 0.82;
+    }
+
+    return float4(saturate(color.rgb), 1.0);
 }
