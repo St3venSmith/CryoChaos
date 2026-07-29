@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
 using System.Windows;
+using System.Windows.Data;
 using CryoChaos.Models;
 using CryoChaos.Services;
 using CryoChaos.Views;
@@ -22,7 +23,9 @@ public partial class MainWindow : Window
     private readonly ScreenTransformService _screenTransform;
     private readonly ChaosEngine _engine;
     private readonly SettingsService _settingsService;
+    private readonly ICollectionView _effectsView;
     private AppSettings _settings;
+    private ScreenFilterLabWindow? _screenFilterLab;
 
     public MainWindow()
     {
@@ -56,6 +59,14 @@ public partial class MainWindow : Window
         Effects = _engine.Effects;
         DetectedBindings = _keybinds.DisplayBindings;
         DataContext = this;
+
+        _effectsView = CollectionViewSource.GetDefaultView(Effects);
+        _effectsView.Filter = MatchesEffectFilter;
+        EffectTypeFilterComboBox.ItemsSource = new[]
+        {
+            "All types"
+        }.Concat(Enum.GetNames<ChaosEffectType>());
+        EffectTypeFilterComboBox.SelectedIndex = 0;
 
         ModeComboBox.ItemsSource = Enum.GetValues<ChaosLevel>();
         ModeComboBox.SelectedItem = _settings.SelectedLevel;
@@ -126,22 +137,69 @@ public partial class MainWindow : Window
         AddLog("Engine stopped.");
     }
 
-    private void EnableAllEffectsButton_Click(object sender, RoutedEventArgs e) =>
-        SetAllEffectsEnabled(true);
+    private void EnableShownEffectsButton_Click(object sender, RoutedEventArgs e) =>
+        SetShownEffectsEnabled(true);
 
-    private void DisableAllEffectsButton_Click(object sender, RoutedEventArgs e) =>
-        SetAllEffectsEnabled(false);
+    private void DisableShownEffectsButton_Click(object sender, RoutedEventArgs e) =>
+        SetShownEffectsEnabled(false);
 
-    private void SetAllEffectsEnabled(bool enabled)
+    private void SetShownEffectsEnabled(bool enabled)
     {
-        foreach (ChaosEffectDefinition effect in Effects)
+        ChaosEffectDefinition[] shownEffects = _effectsView
+            .Cast<ChaosEffectDefinition>()
+            .ToArray();
+
+        foreach (ChaosEffectDefinition effect in shownEffects)
         {
             effect.Enabled = enabled;
         }
 
         EffectsGrid.Items.Refresh();
         SaveSettings();
-        AddLog(enabled ? "All effects enabled." : "All effects disabled.");
+        AddLog(
+            $"{(enabled ? "Enabled" : "Disabled")} " +
+            $"{shownEffects.Length} shown effect(s).");
+    }
+
+    private void EffectFilter_Changed(object sender, RoutedEventArgs e)
+    {
+        _effectsView?.Refresh();
+    }
+
+    private bool MatchesEffectFilter(object item)
+    {
+        if (item is not ChaosEffectDefinition effect)
+        {
+            return false;
+        }
+
+        string selectedType =
+            EffectTypeFilterComboBox.SelectedItem as string ??
+            "All types";
+
+        if (!selectedType.Equals("All types", StringComparison.Ordinal) &&
+            !effect.Type.ToString().Equals(
+                selectedType,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        string query = EffectSearchTextBox.Text.Trim();
+        return query.Length == 0 ||
+               effect.Name.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+               effect.Description.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+               effect.Id.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+               effect.Type.ToString().Contains(query, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void ClearEffectFilterButton_Click(
+        object sender,
+        RoutedEventArgs e)
+    {
+        EffectSearchTextBox.Clear();
+        EffectTypeFilterComboBox.SelectedIndex = 0;
+        _effectsView.Refresh();
     }
 
     private async void TriggerNowButton_Click(object sender, RoutedEventArgs e)
@@ -190,6 +248,26 @@ public partial class MainWindow : Window
 
     private void TestMonitorCaptureButton_Click(object sender, RoutedEventArgs e) =>
         OpenCaptureDiagnostic(captureMonitor: true);
+
+    private void ScreenFilterLabButton_Click(
+        object sender,
+        RoutedEventArgs e)
+    {
+        if (_screenFilterLab is { IsLoaded: true })
+        {
+            _screenFilterLab.Activate();
+            return;
+        }
+
+        _screenFilterLab = new ScreenFilterLabWindow
+        {
+            Owner = this
+        };
+        _screenFilterLab.Closed += (_, _) =>
+            _screenFilterLab = null;
+        _screenFilterLab.Show();
+        AddLog("Opened Screen Filter Lab.");
+    }
 
     private async void TestMouseMoveButton_Click(object sender, RoutedEventArgs e)
     {
@@ -318,6 +396,7 @@ public partial class MainWindow : Window
     private void MainWindow_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
         SaveSettings();
+        _screenFilterLab?.Close();
         _engine.Dispose();
         _screenTransform.Dispose();
         _rawMouseEffects.Dispose();
