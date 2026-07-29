@@ -26,7 +26,7 @@ public sealed class ScreenTransformService : IScreenTransformService
     private readonly object _stateLock = new();
     private readonly Dictionary<Guid, ScreenTransformMode> _activeModes = [];
     private readonly DispatcherTimer _zOrderTimer;
-    private CaptureDiagnosticWindow? _transformWindow;
+    private NativeScreenEffectWindow? _transformWindow;
     private bool _disposed;
 
     public ScreenTransformService(OverlayWindow overlay)
@@ -75,12 +75,11 @@ public sealed class ScreenTransformService : IScreenTransformService
                 ScreenTransformMode[] activeModes = GetActiveModes();
                 if (_transformWindow is null)
                 {
-                    CaptureDiagnosticWindow window = new(destinyWindow, activeModes);
+                    NativeScreenEffectWindow window = new(destinyWindow, activeModes);
                     lock (_stateLock)
                     {
                         _transformWindow = window;
                     }
-                    window.Show();
                     _zOrderTimer.Start();
                 }
                 else
@@ -123,7 +122,7 @@ public sealed class ScreenTransformService : IScreenTransformService
     private void CloseTransformWindowOnUiThread()
     {
         _zOrderTimer.Stop();
-        CaptureDiagnosticWindow? window;
+        NativeScreenEffectWindow? window;
         lock (_stateLock)
         {
             window = _transformWindow;
@@ -171,12 +170,12 @@ public sealed class ScreenTransformService : IScreenTransformService
         {
             return;
         }
-        CaptureDiagnosticWindow? transformWindow;
+        NativeScreenEffectWindow? transformWindow;
         lock (_stateLock)
         {
             transformWindow = _transformWindow;
         }
-        if (transformWindow is null)
+        if (transformWindow is null || !transformWindow.IsVisible)
         {
             return;
         }
