@@ -21,6 +21,7 @@ public sealed class ChaosEffectContext
     public required double RuntimeDurationMultiplier { get; init; }
     public required Action<int> QueueRandomEffects { get; init; }
     public required Func<bool> TryTriggerRandomEffectNow { get; init; }
+    public required Action CancelConflictingInputEffects { get; init; }
     public required IScreenTransformService ScreenTransform { get; init; }
     public required Random Random { get; init; }
     public required bool RequireDestinyForeground { get; init; }
@@ -55,6 +56,12 @@ public interface IChaosEffect
         ChaosEffectContext context,
         CancellationToken cancellationToken);
 }
+
+/// <summary>
+/// Marks QTE-style effects that require deliberate physical keyboard input.
+/// Synthetic key macros are suspended while one of these is active.
+/// </summary>
+public interface IInteractiveChallengeEffect;
 
 /// <summary>
 /// Marks a concrete example class that should compile but should not be loaded
