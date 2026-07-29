@@ -59,7 +59,6 @@ public sealed class ScreenTransformService : IScreenTransformService
         {
             throw new ObjectDisposedException(nameof(ScreenTransformService));
         }
-
         await _effectSlots.WaitAsync(cancellationToken);
         Guid activationId = Guid.NewGuid();
         try
@@ -70,14 +69,12 @@ public sealed class ScreenTransformService : IScreenTransformService
             {
                 throw new InvalidOperationException("Destiny 2 must be running and not minimized for a live screen-transform effect.");
             }
-
             await _overlay.Dispatcher.InvokeAsync(() =>
             {
                 lock (_stateLock)
                 {
                     _activeModes[activationId] = mode;
                 }
-
                 ScreenTransformMode[] activeModes = GetActiveModes();
                 if (_transformWindow is null)
                 {
@@ -95,7 +92,6 @@ public sealed class ScreenTransformService : IScreenTransformService
                 }
                 EnsureOverlayAboveTransform();
             });
-
             try
             {
                 await Task.Delay(duration, cancellationToken);
@@ -179,7 +175,6 @@ public sealed class ScreenTransformService : IScreenTransformService
         {
             return;
         }
-
         CaptureDiagnosticWindow? transformWindow;
         lock (_stateLock)
         {
@@ -189,19 +184,13 @@ public sealed class ScreenTransformService : IScreenTransformService
         {
             return;
         }
-
         IntPtr transformHandle = transformWindow.NativeHandle;
         IntPtr overlayHandle = new WindowInteropHelper(_overlay).Handle;
         if (transformHandle == IntPtr.Zero || overlayHandle == IntPtr.Zero)
         {
             return;
         }
-
-        bool shouldHide =
-            !ForegroundWindowService.IsDestinyForeground() ||
-            ForegroundWindowService.IsSystemCursorVisible();
-
-        if (shouldHide)
+        if (!ForegroundWindowService.IsDestinyForeground())
         {
             if (!_transformHiddenForFocus)
             {
@@ -210,13 +199,11 @@ public sealed class ScreenTransformService : IScreenTransformService
             }
             return;
         }
-
         if (_transformHiddenForFocus)
         {
             ShowWindow(transformHandle, SwShowNoActivate);
             _transformHiddenForFocus = false;
         }
-
         const uint flags = SwpNoMove | SwpNoSize | SwpNoActivate | SwpShowWindow;
         SetWindowPos(transformHandle, HwndTopmost, 0, 0, 0, 0, flags);
         SetWindowPos(overlayHandle, HwndTopmost, 0, 0, 0, 0, flags);
