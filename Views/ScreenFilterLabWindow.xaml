@@ -60,6 +60,9 @@
                 </Grid>
                 <ListBox x:Name="EffectStackListBox"
                          Height="175"
+                         Background="#10141E"
+                         Foreground="#DCE2F2"
+                         BorderBrush="{StaticResource BorderBrush}"
                          SelectionMode="Multiple"
                          SelectionChanged="LiveSetting_Changed">
                     <ListBox.ItemTemplate>
@@ -69,12 +72,15 @@
                                                           Path=IsSelected,
                                                           Mode=OneWay}"
                                       IsHitTestVisible="False"
+                                      Foreground="#DCE2F2"
                                       FontWeight="SemiBold" />
                         </DataTemplate>
                     </ListBox.ItemTemplate>
                     <ListBox.ItemContainerStyle>
                         <Style TargetType="ListBoxItem">
                             <Setter Property="Padding" Value="9,6" />
+                            <Setter Property="Foreground" Value="#DCE2F2" />
+                            <Setter Property="Background" Value="#10141E" />
                             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
                             <Style.Triggers>
                                 <Trigger Property="IsSelected" Value="True">
@@ -184,14 +190,8 @@
                        Foreground="{StaticResource MutedBrush}"
                        VerticalAlignment="Center" />
             <WrapPanel Grid.Column="1">
-                <CheckBox x:Name="AlwaysOnTopCheckBox"
-                          Content="Always on top"
-                          VerticalAlignment="Center"
-                          Margin="0,0,12,0"
-                          Click="AlwaysOnTopCheckBox_Changed"
-                          ToolTip="When off, this behaves like a normal window and can move above or below Destiny." />
-                <Button Content="Play Destiny"
-                        Click="PlayDestinyButton_Click"
+                <Button Content="Hide lab"
+                        Click="HideLabButton_Click"
                         Style="{StaticResource SecondaryButtonStyle}" />
                 <Button Content="Start persistent overlay" Click="StartButton_Click" />
                 <Button Content="Stop" Click="StopButton_Click" Style="{StaticResource DangerButtonStyle}" />
