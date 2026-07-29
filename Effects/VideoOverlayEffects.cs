@@ -17,6 +17,7 @@ public abstract class VideoOverlayChaosEffectBase : IChaosEffect
     protected virtual double Volume => 1.0;
     protected virtual Stretch VideoStretch => Stretch.Uniform;
     protected virtual bool Loop => false;
+    protected virtual bool TransparentBackground => true;
 
     public Task RunAsync(ChaosEffectContext context, CancellationToken cancellationToken) =>
         context.VideoOverlay.ShowAsync(
@@ -26,7 +27,8 @@ public abstract class VideoOverlayChaosEffectBase : IChaosEffect
                 Volume,
                 VideoStretch,
                 Loop,
-                context.GetEffectDuration(Definition)),
+                context.GetEffectDuration(Definition),
+                TransparentBackground),
             cancellationToken);
 }
 
@@ -55,6 +57,7 @@ public sealed class YourVideoOverlayEffect : VideoOverlayChaosEffectBase
     protected override double Volume => 1.0;
     protected override Stretch VideoStretch => Stretch.Uniform;
     protected override bool Loop => false;
+    protected override bool TransparentBackground => true;
 }
 
 /// <summary>
@@ -83,4 +86,5 @@ public sealed class FakeErrorCodeVideoEffect : VideoOverlayChaosEffectBase
     protected override Stretch VideoStretch =>
         Stretch.UniformToFill;
     protected override bool Loop => false;
+    protected override bool TransparentBackground => false;
 }
