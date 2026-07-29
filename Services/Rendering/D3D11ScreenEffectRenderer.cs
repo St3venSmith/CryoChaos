@@ -29,6 +29,18 @@ internal sealed unsafe class D3D11ScreenEffectRenderer : IDisposable
         public float Time;
         public float SourceWidth;
         public float SourceHeight;
+        public float Exposure;
+        public float Contrast;
+        public float Saturation;
+        public float HueRadians;
+        public float Temperature;
+        public float Tint;
+        public float Gamma;
+        public float Vignette;
+        public float Red;
+        public float Green;
+        public float Blue;
+        public float ApplyColorSettings;
     }
 
     private readonly object sync = new();
@@ -65,6 +77,7 @@ internal sealed unsafe class D3D11ScreenEffectRenderer : IDisposable
     private bool captureFaulted;
     private ScreenTransformMode mode;
     private ScreenTransformMode secondaryMode;
+    private ScreenFilterSettings filterSettings = ScreenFilterSettings.Default;
     private readonly Stopwatch effectClock = Stopwatch.StartNew();
     private readonly Stopwatch fpsClock = Stopwatch.StartNew();
     private int framesSinceFpsUpdate;
@@ -111,6 +124,14 @@ internal sealed unsafe class D3D11ScreenEffectRenderer : IDisposable
             effectClock.Restart();
             lastFrozenFrameBucket = -1;
             ClearFeedbackBuffer();
+        }
+    }
+
+    public void SetFilterSettings(ScreenFilterSettings settings)
+    {
+        lock (sync)
+        {
+            filterSettings = settings;
         }
     }
 
@@ -207,7 +228,7 @@ internal sealed unsafe class D3D11ScreenEffectRenderer : IDisposable
 
         settingsBuffer = device.CreateBuffer(new BufferDescription
         {
-            ByteWidth = 16,
+            ByteWidth = (uint)Marshal.SizeOf<PreviewSettings>(),
             BindFlags = BindFlags.ConstantBuffer,
             Usage = ResourceUsage.Dynamic,
             CPUAccessFlags = CpuAccessFlags.Write
@@ -549,16 +570,27 @@ internal sealed unsafe class D3D11ScreenEffectRenderer : IDisposable
 
         if (hasSecondPass)
         {
-            DrawPass(frameView, compositionTarget, mode, fittedViewport);
+            DrawPass(
+                frameView,
+                compositionTarget,
+                mode,
+                fittedViewport,
+                applyColorSettings: false);
             DrawPass(
                 compositionView,
                 renderTarget,
                 secondaryMode,
-                fullViewport);
+                fullViewport,
+                applyColorSettings: true);
         }
         else
         {
-            DrawPass(frameView, renderTarget, mode, fittedViewport);
+            DrawPass(
+                frameView,
+                renderTarget,
+                mode,
+                fittedViewport,
+                applyColorSettings: true);
         }
 
         if (feedbackMode)
@@ -582,7 +614,8 @@ internal sealed unsafe class D3D11ScreenEffectRenderer : IDisposable
         ID3D11ShaderResourceView sourceView,
         ID3D11RenderTargetView target,
         ScreenTransformMode effectMode,
-        Viewport viewport)
+        Viewport viewport,
+        bool applyColorSettings)
     {
         context.OMSetRenderTargets(target);
         context.ClearRenderTargetView(target, Colors.Black);
@@ -593,7 +626,19 @@ internal sealed unsafe class D3D11ScreenEffectRenderer : IDisposable
             Mode = (float)effectMode,
             Time = (float)effectClock.Elapsed.TotalSeconds,
             SourceWidth = sourceWidth,
-            SourceHeight = sourceHeight
+            SourceHeight = sourceHeight,
+            Exposure = filterSettings.Exposure,
+            Contrast = filterSettings.Contrast,
+            Saturation = filterSettings.Saturation,
+            HueRadians = filterSettings.HueDegrees * (MathF.PI / 180.0f),
+            Temperature = filterSettings.Temperature,
+            Tint = filterSettings.Tint,
+            Gamma = filterSettings.Gamma,
+            Vignette = filterSettings.Vignette,
+            Red = filterSettings.Red,
+            Green = filterSettings.Green,
+            Blue = filterSettings.Blue,
+            ApplyColorSettings = applyColorSettings ? 1.0f : 0.0f
         };
         MappedSubresource mapped = context.Map(settingsBuffer, MapMode.WriteDiscard);
         Unsafe.Copy(mapped.DataPointer.ToPointer(), ref settings);
