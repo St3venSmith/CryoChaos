@@ -152,12 +152,26 @@
                                 <TextBlock Text="Choose which effects can be selected by the chaos engine."
                                            Foreground="{StaticResource MutedBrush}"
                                            Margin="0,3,0,0" />
+                                <WrapPanel Margin="0,10,0,0">
+                                    <TextBox x:Name="EffectSearchTextBox"
+                                             Width="240"
+                                             Margin="0,0,8,0"
+                                             ToolTip="Search effect names, descriptions, IDs, or types"
+                                             TextChanged="EffectFilter_Changed" />
+                                    <ComboBox x:Name="EffectTypeFilterComboBox"
+                                              Width="170"
+                                              Margin="0,0,8,0"
+                                              SelectionChanged="EffectFilter_Changed" />
+                                    <Button Content="Clear filter"
+                                            Click="ClearEffectFilterButton_Click"
+                                            Style="{StaticResource SecondaryButtonStyle}" />
+                                </WrapPanel>
                             </StackPanel>
                             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                                <Button Content="Turn all on"
-                                        Click="EnableAllEffectsButton_Click" />
-                                <Button Content="Turn all off"
-                                        Click="DisableAllEffectsButton_Click"
+                                <Button Content="Enable shown"
+                                        Click="EnableShownEffectsButton_Click" />
+                                <Button Content="Disable shown"
+                                        Click="DisableShownEffectsButton_Click"
                                         Style="{StaticResource DangerButtonStyle}" />
                             </StackPanel>
                         </Grid>
@@ -225,6 +239,7 @@
                 <Button x:Name="TestGameCaptureButton" Content="Test game capture" Click="TestGameCaptureButton_Click" Style="{StaticResource SecondaryButtonStyle}" />
                 <Button x:Name="TestMonitorCaptureButton" Content="Test monitor capture" Click="TestMonitorCaptureButton_Click" Style="{StaticResource SecondaryButtonStyle}" />
                 <Button x:Name="TestMouseMoveButton" Content="Test mouse move" Click="TestMouseMoveButton_Click" Style="{StaticResource SecondaryButtonStyle}" />
+                <Button x:Name="ScreenFilterLabButton" Content="Screen Filter Lab" Click="ScreenFilterLabButton_Click" />
             </WrapPanel>
         </Border>
     </Grid>
