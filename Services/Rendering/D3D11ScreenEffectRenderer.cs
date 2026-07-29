@@ -658,7 +658,8 @@ internal sealed unsafe class D3D11ScreenEffectRenderer : IDisposable
 
     private static bool IsFeedbackMode(ScreenTransformMode value) =>
         value is ScreenTransformMode.PortalVoid or
-            ScreenTransformMode.UnclearedFrameBuffer;
+            ScreenTransformMode.UnclearedFrameBuffer or
+            ScreenTransformMode.MotionEcho;
 
     private static ScreenTransformMode[] NormalizeEffectModes(
         IReadOnlyList<ScreenTransformMode> modes)
