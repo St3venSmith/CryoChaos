@@ -6,7 +6,7 @@
         Height="820"
         MinWidth="650"
         MinHeight="620"
-        Topmost="True"
+        Topmost="False"
         WindowStartupLocation="CenterOwner"
         Background="{StaticResource PanelBrush}"
         Foreground="{StaticResource TextBrush}">
