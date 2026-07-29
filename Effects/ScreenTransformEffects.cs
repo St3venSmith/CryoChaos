@@ -544,3 +544,22 @@ public sealed class UnclearedFrameBufferEffect : ScreenTransformEffectBase
     protected override ScreenTransformMode TransformMode =>
         ScreenTransformMode.UnclearedFrameBuffer;
 }
+
+public sealed class MotionEchoScreenEffect : ScreenTransformEffectBase
+{
+    public override ChaosEffectDefinition Definition { get; } = new()
+    {
+        Id = "motion_echo",
+        Name = "Motion Xerox",
+        Description = "Moving parts of the live image smear into displaced copies of earlier frames.",
+        Type = ChaosEffectType.ScreenTransform,
+        MinimumLevel = ChaosLevel.Chaos,
+        Weight = 1,
+        DurationSeconds = 11,
+        CooldownSeconds = 135,
+        CanStack = false
+    };
+
+    protected override ScreenTransformMode TransformMode =>
+        ScreenTransformMode.MotionEcho;
+}
