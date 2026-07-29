@@ -124,6 +124,9 @@ public sealed class VideoOverlayService : IDisposable
             int style = GetWindowLong(hwnd, GwlExstyle);
             SetWindowLong(hwnd, GwlExstyle,
                 style | WsExTransparent | WsExToolwindow | WsExNoactivate);
+            GameMonitorPlacementService.FillGameMonitor(
+                _window,
+                activate: false);
         };
         _window.Show();
         _media.Play();
