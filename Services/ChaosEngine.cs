@@ -642,13 +642,6 @@ public sealed class ChaosEngine : IDisposable
                 item.Effect is not RawMouseChaosEffectBase);
         }
 
-        int activeScreenEffects = active.Count(item =>
-            item.Effect.Definition.Type == ChaosEffectType.ScreenTransform);
-        if (candidateIsScreen && activeScreenEffects >= 2)
-        {
-            return false;
-        }
-
         ActiveEffect[] relevant = active
             .Where(item =>
                 item.Effect.Definition.Type != ChaosEffectType.Mutator &&
