@@ -34,13 +34,57 @@
                 <TextBlock Text="SHADER STACK"
                            FontWeight="Bold"
                            Margin="0,0,0,6" />
-                <TextBlock Text="Select any number. Ctrl+click toggles effects; Shift+click selects a range."
-                           Foreground="{StaticResource MutedBrush}"
-                           Margin="0,0,0,8" />
+                <Grid Margin="0,0,0,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel>
+                        <TextBlock Text="Check every shader you want enabled. Checked effects run from top to bottom."
+                                   Foreground="{StaticResource MutedBrush}" />
+                        <TextBlock x:Name="SelectedEffectCountTextBlock"
+                                   Text="0 effects enabled"
+                                   Foreground="{StaticResource AccentBrush}"
+                                   FontWeight="SemiBold"
+                                   Margin="0,4,0,0" />
+                    </StackPanel>
+                    <WrapPanel Grid.Column="1"
+                               VerticalAlignment="Center">
+                        <Button Content="Select all"
+                                Click="SelectAllShadersButton_Click"
+                                Style="{StaticResource SecondaryButtonStyle}" />
+                        <Button Content="Clear"
+                                Click="ClearShadersButton_Click"
+                                Style="{StaticResource SecondaryButtonStyle}" />
+                    </WrapPanel>
+                </Grid>
                 <ListBox x:Name="EffectStackListBox"
-                         Height="145"
-                         SelectionMode="Extended"
-                         SelectionChanged="LiveSetting_Changed" />
+                         Height="175"
+                         SelectionMode="Multiple"
+                         SelectionChanged="LiveSetting_Changed">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <CheckBox Content="{Binding}"
+                                      IsChecked="{Binding RelativeSource={RelativeSource AncestorType=ListBoxItem},
+                                                          Path=IsSelected,
+                                                          Mode=OneWay}"
+                                      IsHitTestVisible="False"
+                                      FontWeight="SemiBold" />
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                            <Setter Property="Padding" Value="9,6" />
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                            <Style.Triggers>
+                                <Trigger Property="IsSelected" Value="True">
+                                    <Setter Property="Background" Value="{StaticResource AccentSoftBrush}" />
+                                    <Setter Property="Foreground" Value="White" />
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                </ListBox>
             </StackPanel>
         </Border>
 
@@ -140,11 +184,12 @@
                        Foreground="{StaticResource MutedBrush}"
                        VerticalAlignment="Center" />
             <WrapPanel Grid.Column="1">
-                <CheckBox x:Name="EditOverGameCheckBox"
-                          Content="Edit over game"
+                <CheckBox x:Name="AlwaysOnTopCheckBox"
+                          Content="Always on top"
                           VerticalAlignment="Center"
                           Margin="0,0,12,0"
-                          Click="EditOverGameCheckBox_Changed" />
+                          Click="AlwaysOnTopCheckBox_Changed"
+                          ToolTip="When off, this behaves like a normal window and can move above or below Destiny." />
                 <Button Content="Play Destiny"
                         Click="PlayDestinyButton_Click"
                         Style="{StaticResource SecondaryButtonStyle}" />
