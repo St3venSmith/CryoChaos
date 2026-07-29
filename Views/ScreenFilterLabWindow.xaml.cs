@@ -58,6 +58,12 @@ public partial class ScreenFilterLabWindow : Window
             SaveProfile();
             StatusTextBlock.Text =
                 "Running persistently — click-through and non-activating";
+
+            // Only the native render surface belongs above Destiny. The lab
+            // is a normal control window and must immediately yield keyboard
+            // and mouse focus so the game can keep receiving input.
+            Topmost = false;
+            ForegroundWindowService.TryActivateDestinyWindow();
         }
         catch (Exception exception)
         {
