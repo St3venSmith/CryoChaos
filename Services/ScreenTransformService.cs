@@ -20,8 +20,6 @@ public sealed class ScreenTransformService : IScreenTransformService
     private const uint SwpNoSize = 0x0001;
     private const uint SwpNoActivate = 0x0010;
     private const uint SwpShowWindow = 0x0040;
-    private const int SwHide = 0;
-    private const int SwShowNoActivate = 4;
     private readonly OverlayWindow _overlay;
     private const int MaximumSimultaneousScreenEffects = 2;
     private readonly SemaphoreSlim _effectSlots = new(MaximumSimultaneousScreenEffects, MaximumSimultaneousScreenEffects);
@@ -29,7 +27,6 @@ public sealed class ScreenTransformService : IScreenTransformService
     private readonly Dictionary<Guid, ScreenTransformMode> _activeModes = [];
     private readonly DispatcherTimer _zOrderTimer;
     private CaptureDiagnosticWindow? _transformWindow;
-    private bool _transformHiddenForFocus;
     private bool _disposed;
 
     public ScreenTransformService(OverlayWindow overlay)
@@ -131,7 +128,6 @@ public sealed class ScreenTransformService : IScreenTransformService
         {
             window = _transformWindow;
             _transformWindow = null;
-            _transformHiddenForFocus = false;
         }
         window?.Close();
     }
@@ -190,20 +186,6 @@ public sealed class ScreenTransformService : IScreenTransformService
         {
             return;
         }
-        if (!ForegroundWindowService.IsDestinyForeground())
-        {
-            if (!_transformHiddenForFocus)
-            {
-                ShowWindow(transformHandle, SwHide);
-                _transformHiddenForFocus = true;
-            }
-            return;
-        }
-        if (_transformHiddenForFocus)
-        {
-            ShowWindow(transformHandle, SwShowNoActivate);
-            _transformHiddenForFocus = false;
-        }
         const uint flags = SwpNoMove | SwpNoSize | SwpNoActivate | SwpShowWindow;
         SetWindowPos(transformHandle, HwndTopmost, 0, 0, 0, 0, flags);
         SetWindowPos(overlayHandle, HwndTopmost, 0, 0, 0, 0, flags);
@@ -234,8 +216,4 @@ public sealed class ScreenTransformService : IScreenTransformService
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool SetWindowPos(IntPtr window, IntPtr insertAfter, int x, int y, int width, int height, uint flags);
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool ShowWindow(IntPtr window, int command);
 }
