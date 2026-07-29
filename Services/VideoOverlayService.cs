@@ -1,10 +1,13 @@
 using System.IO;
 using System.Windows;
-using System.Windows.Controls;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
 using System.Runtime.InteropServices;
+using LibVLCSharp.Shared;
+using LibVLCSharp.WPF;
+using VlcMedia = LibVLCSharp.Shared.Media;
+using VlcMediaPlayer = LibVLCSharp.Shared.MediaPlayer;
 
 namespace CryoChaos.Services;
 
@@ -26,9 +29,16 @@ public sealed class VideoOverlayService : IDisposable
     private readonly Dispatcher _dispatcher;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private Window? _window;
-    private MediaElement? _media;
+    private VideoView? _videoView;
+    private LibVLC? _libVlc;
+    private VlcMedia? _media;
+    private VlcMediaPlayer? _mediaPlayer;
 
-    public VideoOverlayService(Dispatcher dispatcher) => _dispatcher = dispatcher;
+    public VideoOverlayService(Dispatcher dispatcher)
+    {
+        _dispatcher = dispatcher;
+        Core.Initialize();
+    }
 
     public async Task ShowAsync(
         VideoOverlayOptions options,
@@ -73,52 +83,56 @@ public sealed class VideoOverlayService : IDisposable
         VideoOverlayOptions options,
         TaskCompletionSource playbackEnded)
     {
-        _media = new MediaElement
+        _libVlc = new LibVLC(
+            "--no-video-title-show",
+            "--no-osd",
+            "--quiet");
+        _mediaPlayer = new VlcMediaPlayer(_libVlc)
         {
-            Source = new Uri(fullPath),
-            LoadedBehavior = MediaState.Manual,
-            UnloadedBehavior = MediaState.Manual,
-            Stretch = options.Stretch,
-            Volume = Math.Clamp(options.Volume, 0, 1),
-            Opacity = Math.Clamp(options.Opacity, 0.05, 1),
+            Volume = (int)Math.Round(
+                Math.Clamp(options.Volume, 0, 1) * 100)
+        };
+        _media = new VlcMedia(
+            _libVlc,
+            new Uri(fullPath));
+        _videoView = new VideoView
+        {
+            MediaPlayer = _mediaPlayer,
             IsHitTestVisible = false,
-            ScrubbingEnabled = true
+            Opacity = Math.Clamp(options.Opacity, 0.05, 1)
         };
-        _media.MediaOpened += (_, _) =>
-        {
-            _media.Position = TimeSpan.Zero;
-            _media.Play();
-        };
-        _media.MediaEnded += (_, _) =>
+
+        _mediaPlayer.EndReached += (_, _) =>
         {
             if (options.Loop)
             {
-                _media.Position = TimeSpan.Zero;
-                _media.Play();
+                // LibVLC events run on a native callback thread. Restart
+                // outside that callback to avoid re-entering the player.
+                _ = Task.Run(() =>
+                {
+                    if (_mediaPlayer is not null &&
+                        _media is not null)
+                    {
+                        _mediaPlayer.Stop();
+                        _mediaPlayer.Play(_media);
+                    }
+                });
             }
             else
             {
                 playbackEnded.TrySetResult();
             }
         };
-        _media.MediaFailed += (_, args) =>
+        _mediaPlayer.EncounteredError += (_, _) =>
             playbackEnded.TrySetException(
-                args.ErrorException ?? new InvalidOperationException("Video playback failed."));
-
-        Grid transparentSurface = new()
-        {
-            Background = options.TransparentBackground
-                ? Brushes.Transparent
-                : Brushes.Black,
-            IsHitTestVisible = false
-        };
-        transparentSurface.Children.Add(_media);
+                new InvalidOperationException(
+                    $"LibVLC could not play '{fullPath}'."));
 
         _window = new Window
         {
-            // MediaElement's hardware-backed video surface is unreliable in
-            // a layered AllowsTransparency window. Full-screen videos use an
-            // ordinary opaque borderless HWND while remaining click-through.
+            // LibVLC renders into a native child HWND. Full-screen videos use
+            // an ordinary opaque borderless host while both HWNDs remain
+            // click-through and non-activating.
             AllowsTransparency = options.TransparentBackground,
             Background = options.TransparentBackground
                 ? Brushes.Transparent
@@ -129,20 +143,38 @@ public sealed class VideoOverlayService : IDisposable
             ShowActivated = false,
             Topmost = true,
             WindowState = WindowState.Normal,
-            Content = transparentSurface,
+            Content = _videoView,
             IsHitTestVisible = false
         };
         _window.SourceInitialized += (_, _) =>
         {
             IntPtr hwnd = new WindowInteropHelper(_window).Handle;
-            int style = GetWindowLong(hwnd, GwlExstyle);
-            SetWindowLong(hwnd, GwlExstyle,
-                style | WsExTransparent | WsExToolwindow | WsExNoactivate);
+            MakeWindowClickThrough(hwnd);
             GameMonitorPlacementService.FillGameMonitor(
                 _window,
                 activate: false);
         };
+        _window.ContentRendered += (_, _) =>
+        {
+            IntPtr hwnd = new WindowInteropHelper(_window).Handle;
+            MakeWindowClickThrough(hwnd);
+            EnumChildWindows(
+                hwnd,
+                (child, _) =>
+                {
+                    MakeWindowClickThrough(child);
+                    return true;
+                },
+                IntPtr.Zero);
+        };
         _window.Show();
+
+        if (!_mediaPlayer.Play(_media))
+        {
+            playbackEnded.TrySetException(
+                new InvalidOperationException(
+                    $"LibVLC refused to start '{fullPath}'."));
+        }
     }
 
     private void CloseWindow()
@@ -154,10 +186,22 @@ public sealed class VideoOverlayService : IDisposable
 
         _dispatcher.Invoke(() =>
         {
-            _media?.Stop();
-            _media?.Close();
+            _mediaPlayer?.Stop();
             _window?.Close();
+
+            if (_videoView is not null)
+            {
+                _videoView.MediaPlayer = null;
+            }
+
+            _mediaPlayer?.Dispose();
+            _media?.Dispose();
+            _libVlc?.Dispose();
+
+            _videoView = null;
+            _mediaPlayer = null;
             _media = null;
+            _libVlc = null;
             _window = null;
         });
     }
@@ -168,9 +212,37 @@ public sealed class VideoOverlayService : IDisposable
         _gate.Dispose();
     }
 
+    private static void MakeWindowClickThrough(IntPtr window)
+    {
+        if (window == IntPtr.Zero)
+        {
+            return;
+        }
+
+        int style = GetWindowLong(window, GwlExstyle);
+        SetWindowLong(
+            window,
+            GwlExstyle,
+            style |
+            WsExTransparent |
+            WsExToolwindow |
+            WsExNoactivate);
+    }
+
     [DllImport("user32.dll", EntryPoint = "GetWindowLongW")]
     private static extern int GetWindowLong(IntPtr hwnd, int index);
 
     [DllImport("user32.dll", EntryPoint = "SetWindowLongW")]
     private static extern int SetWindowLong(IntPtr hwnd, int index, int value);
+
+    private delegate bool EnumWindowProcedure(
+        IntPtr window,
+        IntPtr parameter);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool EnumChildWindows(
+        IntPtr parent,
+        EnumWindowProcedure callback,
+        IntPtr parameter);
 }
