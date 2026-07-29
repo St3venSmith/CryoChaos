@@ -282,11 +282,11 @@ float4 PSMain(VertexOutput input) : SV_TARGET
             uv).rgb;
 
         // Compare the new capture with the retained output. Pixels that have
-        // not changed keep the fresh image; changed pixels pull several
-        // displaced copies out of history. Using lerp rather than addition
-        // prevents the trail from becoming brighter every frame.
+        // not changed keep the fresh image; changed pixels copy one exact
+        // historical sample. There is deliberately no weighted blend or
+        // multiplier here, so copied pixels never fade or become brighter.
         float difference = length(color.rgb - previous);
-        float motionMask = smoothstep(0.035, 0.24, difference);
+        float motionMask = step(0.055, difference);
         float2 drift = float2(
             8.0 + 5.0 * sin(EffectTime * 1.7),
             5.0 + 4.0 * cos(EffectTime * 1.3)) * pixel;
@@ -299,17 +299,14 @@ float4 PSMain(VertexOutput input) : SV_TARGET
         float3 echoC = PreviousFrameTexture.Sample(
             LinearSampler,
             saturate(uv - drift * 1.4)).rgb;
-        float3 copiedHistory =
-            previous * 0.40 +
-            echoA * 0.27 +
-            echoB * 0.19 +
-            echoC * 0.14;
+        float selector = RandomNoise(floor(uv * float2(160.0, 90.0)));
+        float3 copiedHistory = previous;
+        if (selector > 0.25 && selector <= 0.50) copiedHistory = echoA;
+        else if (selector > 0.50 && selector <= 0.75) copiedHistory = echoB;
+        else if (selector > 0.75) copiedHistory = echoC;
 
-        float startup = smoothstep(0.08, 0.35, EffectTime);
-        color.rgb = lerp(
-            color.rgb,
-            copiedHistory,
-            motionMask * startup * 0.86);
+        float startup = step(0.15, EffectTime);
+        color.rgb = lerp(color.rgb, copiedHistory, motionMask * startup);
     }
 
     if (mode == 23)                                               // dream blur
