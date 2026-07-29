@@ -9,35 +9,25 @@ namespace CryoChaos.Services;
 public interface IScreenTransformService : IDisposable
 {
     bool IsActive { get; }
-
-    Task ShowAsync(
-        ScreenTransformMode mode,
-        TimeSpan duration,
-        CancellationToken cancellationToken);
-
+    Task ShowAsync(ScreenTransformMode mode, TimeSpan duration, CancellationToken cancellationToken);
     Task StopAsync();
 }
 
 public sealed class ScreenTransformService : IScreenTransformService
 {
     private static readonly IntPtr HwndTopmost = new(-1);
-
     private const uint SwpNoMove = 0x0002;
     private const uint SwpNoSize = 0x0001;
     private const uint SwpNoActivate = 0x0010;
     private const uint SwpShowWindow = 0x0040;
     private const int SwHide = 0;
     private const int SwShowNoActivate = 4;
-
     private readonly OverlayWindow _overlay;
     private const int MaximumSimultaneousScreenEffects = 2;
-    private readonly SemaphoreSlim _effectSlots = new(
-        MaximumSimultaneousScreenEffects,
-        MaximumSimultaneousScreenEffects);
+    private readonly SemaphoreSlim _effectSlots = new(MaximumSimultaneousScreenEffects, MaximumSimultaneousScreenEffects);
     private readonly object _stateLock = new();
     private readonly Dictionary<Guid, ScreenTransformMode> _activeModes = [];
     private readonly DispatcherTimer _zOrderTimer;
-
     private CaptureDiagnosticWindow? _transformWindow;
     private bool _transformHiddenForFocus;
     private bool _disposed;
@@ -45,14 +35,11 @@ public sealed class ScreenTransformService : IScreenTransformService
     public ScreenTransformService(OverlayWindow overlay)
     {
         _overlay = overlay;
-
         _zOrderTimer = new DispatcherTimer(DispatcherPriority.Send)
         {
             Interval = TimeSpan.FromMilliseconds(250)
         };
-
-        _zOrderTimer.Tick += (_, _) =>
-            EnsureOverlayAboveTransform();
+        _zOrderTimer.Tick += (_, _) => EnsureOverlayAboveTransform();
     }
 
     public bool IsActive
@@ -66,30 +53,22 @@ public sealed class ScreenTransformService : IScreenTransformService
         }
     }
 
-    public async Task ShowAsync(
-        ScreenTransformMode mode,
-        TimeSpan duration,
-        CancellationToken cancellationToken)
+    public async Task ShowAsync(ScreenTransformMode mode, TimeSpan duration, CancellationToken cancellationToken)
     {
         if (_disposed)
         {
-            throw new ObjectDisposedException(
-                nameof(ScreenTransformService));
+            throw new ObjectDisposedException(nameof(ScreenTransformService));
         }
 
         await _effectSlots.WaitAsync(cancellationToken);
         Guid activationId = Guid.NewGuid();
-
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
-
             IntPtr destinyWindow = DestinyWindowService.FindDestinyWindow();
-
             if (!DestinyWindowService.IsUsableWindow(destinyWindow))
             {
-                throw new InvalidOperationException(
-                    "Destiny 2 must be running and not minimized for a live screen-transform effect.");
+                throw new InvalidOperationException("Destiny 2 must be running and not minimized for a live screen-transform effect.");
             }
 
             await _overlay.Dispatcher.InvokeAsync(() =>
@@ -107,7 +86,6 @@ public sealed class ScreenTransformService : IScreenTransformService
                     {
                         _transformWindow = window;
                     }
-
                     window.Show();
                     _zOrderTimer.Start();
                 }
@@ -115,7 +93,6 @@ public sealed class ScreenTransformService : IScreenTransformService
                 {
                     _transformWindow.SetEffectModes(activeModes);
                 }
-
                 EnsureOverlayAboveTransform();
             });
 
@@ -136,12 +113,10 @@ public sealed class ScreenTransformService : IScreenTransformService
 
     public async Task StopAsync()
     {
-        if (_overlay.Dispatcher.HasShutdownStarted ||
-            _overlay.Dispatcher.HasShutdownFinished)
+        if (_overlay.Dispatcher.HasShutdownStarted || _overlay.Dispatcher.HasShutdownFinished)
         {
             return;
         }
-
         await _overlay.Dispatcher.InvokeAsync(() =>
         {
             lock (_stateLock)
@@ -155,49 +130,36 @@ public sealed class ScreenTransformService : IScreenTransformService
     private void CloseTransformWindowOnUiThread()
     {
         _zOrderTimer.Stop();
-
         CaptureDiagnosticWindow? window;
-
         lock (_stateLock)
         {
             window = _transformWindow;
             _transformWindow = null;
             _transformHiddenForFocus = false;
         }
-
-        if (window is null)
-        {
-            return;
-        }
-
-        window.Close();
+        window?.Close();
     }
 
     private ScreenTransformMode[] GetActiveModes()
     {
         lock (_stateLock)
         {
-            return _activeModes.Values
-                .Take(MaximumSimultaneousScreenEffects)
-                .ToArray();
+            return _activeModes.Values.Take(MaximumSimultaneousScreenEffects).ToArray();
         }
     }
 
     private async Task RemoveEffectAsync(Guid activationId)
     {
-        if (_overlay.Dispatcher.HasShutdownStarted ||
-            _overlay.Dispatcher.HasShutdownFinished)
+        if (_overlay.Dispatcher.HasShutdownStarted || _overlay.Dispatcher.HasShutdownFinished)
         {
             return;
         }
-
         await _overlay.Dispatcher.InvokeAsync(() =>
         {
             lock (_stateLock)
             {
                 _activeModes.Remove(activationId);
             }
-
             ScreenTransformMode[] remaining = GetActiveModes();
             if (remaining.Length == 0)
             {
@@ -213,36 +175,33 @@ public sealed class ScreenTransformService : IScreenTransformService
 
     private void EnsureOverlayAboveTransform()
     {
-        if (_overlay.Dispatcher.HasShutdownStarted ||
-            _overlay.Dispatcher.HasShutdownFinished)
+        if (_overlay.Dispatcher.HasShutdownStarted || _overlay.Dispatcher.HasShutdownFinished)
         {
             return;
         }
 
         CaptureDiagnosticWindow? transformWindow;
-
         lock (_stateLock)
         {
             transformWindow = _transformWindow;
         }
-
-        if (transformWindow is null || !transformWindow.IsVisible)
+        if (transformWindow is null)
         {
-            if (transformWindow is null)
-            {
-                return;
-            }
+            return;
         }
 
         IntPtr transformHandle = transformWindow.NativeHandle;
         IntPtr overlayHandle = new WindowInteropHelper(_overlay).Handle;
-
         if (transformHandle == IntPtr.Zero || overlayHandle == IntPtr.Zero)
         {
             return;
         }
 
-        if (!ForegroundWindowService.IsDestinyForeground())
+        bool shouldHide =
+            !ForegroundWindowService.IsDestinyForeground() ||
+            ForegroundWindowService.IsSystemCursorVisible();
+
+        if (shouldHide)
         {
             if (!_transformHiddenForFocus)
             {
@@ -258,29 +217,9 @@ public sealed class ScreenTransformService : IScreenTransformService
             _transformHiddenForFocus = false;
         }
 
-        const uint flags =
-            SwpNoMove |
-            SwpNoSize |
-            SwpNoActivate |
-            SwpShowWindow;
-
-        SetWindowPos(
-            transformHandle,
-            HwndTopmost,
-            0,
-            0,
-            0,
-            0,
-            flags);
-
-        SetWindowPos(
-            overlayHandle,
-            HwndTopmost,
-            0,
-            0,
-            0,
-            0,
-            flags);
+        const uint flags = SwpNoMove | SwpNoSize | SwpNoActivate | SwpShowWindow;
+        SetWindowPos(transformHandle, HwndTopmost, 0, 0, 0, 0, flags);
+        SetWindowPos(overlayHandle, HwndTopmost, 0, 0, 0, 0, flags);
     }
 
     public void Dispose()
@@ -289,12 +228,9 @@ public sealed class ScreenTransformService : IScreenTransformService
         {
             return;
         }
-
         _disposed = true;
         _zOrderTimer.Stop();
-
-        if (!_overlay.Dispatcher.HasShutdownStarted &&
-            !_overlay.Dispatcher.HasShutdownFinished)
+        if (!_overlay.Dispatcher.HasShutdownStarted && !_overlay.Dispatcher.HasShutdownFinished)
         {
             if (_overlay.Dispatcher.CheckAccess())
             {
@@ -305,20 +241,12 @@ public sealed class ScreenTransformService : IScreenTransformService
                 _overlay.Dispatcher.Invoke(CloseTransformWindowOnUiThread);
             }
         }
-
         _effectSlots.Dispose();
     }
 
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool SetWindowPos(
-        IntPtr window,
-        IntPtr insertAfter,
-        int x,
-        int y,
-        int width,
-        int height,
-        uint flags);
+    private static extern bool SetWindowPos(IntPtr window, IntPtr insertAfter, int x, int y, int width, int height, uint flags);
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
