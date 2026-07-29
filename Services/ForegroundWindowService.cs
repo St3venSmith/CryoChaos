@@ -5,8 +5,6 @@ namespace CryoChaos.Services;
 
 public static class ForegroundWindowService
 {
-    private const int CursorShowing = 0x00000001;
-
     public static bool IsWindowForeground(IntPtr window) =>
         window != IntPtr.Zero && GetForegroundWindow() == window;
 
@@ -17,7 +15,6 @@ public static class ForegroundWindowService
         {
             return false;
         }
-
         return SetForegroundWindow(window);
     }
 
@@ -28,7 +25,6 @@ public static class ForegroundWindowService
         {
             return false;
         }
-
         _ = GetWindowThreadProcessId(window, out uint processId);
         try
         {
@@ -41,17 +37,6 @@ public static class ForegroundWindowService
         }
     }
 
-    public static bool IsSystemCursorVisible()
-    {
-        CursorInfo info = new()
-        {
-            Size = (uint)Marshal.SizeOf<CursorInfo>()
-        };
-
-        return GetCursorInfo(ref info) &&
-            (info.Flags & CursorShowing) != 0;
-    }
-
     [DllImport("user32.dll")]
     private static extern IntPtr GetForegroundWindow();
 
@@ -61,24 +46,4 @@ public static class ForegroundWindowService
 
     [DllImport("user32.dll")]
     private static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool GetCursorInfo(ref CursorInfo cursorInfo);
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct CursorInfo
-    {
-        public uint Size;
-        public int Flags;
-        public IntPtr Cursor;
-        public NativePoint ScreenPosition;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct NativePoint
-    {
-        public int X;
-        public int Y;
-    }
 }
