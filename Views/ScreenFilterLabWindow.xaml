@@ -30,23 +30,18 @@
         <Border Grid.Row="1"
                 Style="{StaticResource CardStyle}"
                 Margin="0,16,0,14">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="18" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <StackPanel>
-                    <TextBlock Text="PRIMARY SHADER" FontWeight="Bold" Margin="0,0,0,6" />
-                    <ComboBox x:Name="PrimaryEffectComboBox"
-                              SelectionChanged="LiveSetting_Changed" />
-                </StackPanel>
-                <StackPanel Grid.Column="2">
-                    <TextBlock Text="SECONDARY SHADER" FontWeight="Bold" Margin="0,0,0,6" />
-                    <ComboBox x:Name="SecondaryEffectComboBox"
-                              SelectionChanged="LiveSetting_Changed" />
-                </StackPanel>
-            </Grid>
+            <StackPanel>
+                <TextBlock Text="SHADER STACK"
+                           FontWeight="Bold"
+                           Margin="0,0,0,6" />
+                <TextBlock Text="Select any number. Ctrl+click toggles effects; Shift+click selects a range."
+                           Foreground="{StaticResource MutedBrush}"
+                           Margin="0,0,0,8" />
+                <ListBox x:Name="EffectStackListBox"
+                         Height="145"
+                         SelectionMode="Extended"
+                         SelectionChanged="LiveSetting_Changed" />
+            </StackPanel>
         </Border>
 
         <Border Grid.Row="2" Style="{StaticResource CardStyle}">
@@ -145,6 +140,15 @@
                        Foreground="{StaticResource MutedBrush}"
                        VerticalAlignment="Center" />
             <WrapPanel Grid.Column="1">
+                <CheckBox x:Name="EditOverGameCheckBox"
+                          Content="Edit over game"
+                          VerticalAlignment="Center"
+                          Margin="0,0,12,0"
+                          Checked="EditOverGameCheckBox_Changed"
+                          Unchecked="EditOverGameCheckBox_Changed" />
+                <Button Content="Play Destiny"
+                        Click="PlayDestinyButton_Click"
+                        Style="{StaticResource SecondaryButtonStyle}" />
                 <Button Content="Start persistent overlay" Click="StartButton_Click" />
                 <Button Content="Stop" Click="StopButton_Click" Style="{StaticResource DangerButtonStyle}" />
             </WrapPanel>
