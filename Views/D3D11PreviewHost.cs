@@ -12,7 +12,6 @@ public sealed class D3D11PreviewHost : HwndHost
 {
     private const int WmNcHitTest = 0x0084;
     private static readonly IntPtr HtTransparent = new(-1);
-
     private HwndSource? _childSource;
     private D3D11ScreenEffectRenderer? _renderer;
 
@@ -21,35 +20,28 @@ public sealed class D3D11PreviewHost : HwndHost
     public (int Width, int Height) CaptureSize => _renderer?.CaptureSize ?? (0, 0);
     public (int Width, int Height) OutputSize => _renderer?.OutputSize ?? (0, 0);
 
-    public void StartCapture(IntPtr sourceWindow, ScreenTransformMode mode) =>
-        StartCapture(sourceWindow, [mode]);
+    public void StartCapture(IntPtr sourceWindow, ScreenTransformMode mode) => StartCapture(sourceWindow, [mode]);
 
     public void StartCapture(IntPtr sourceWindow, IReadOnlyList<ScreenTransformMode> modes)
     {
         if (_renderer is null)
         {
-            throw new InvalidOperationException(
-                "The Direct3D preview surface has not been created yet.");
+            throw new InvalidOperationException("The Direct3D preview surface has not been created yet.");
         }
-
         RefreshSurfaceSize();
         _renderer.StartCapture(sourceWindow, modes);
         Dispatcher.BeginInvoke(RefreshSurfaceSize);
     }
 
     public void StopCapture() => _renderer?.StopCapture();
-
-    public void SetEffectModes(IReadOnlyList<ScreenTransformMode> modes) =>
-        _renderer?.SetEffectModes(modes);
+    public void SetEffectModes(IReadOnlyList<ScreenTransformMode> modes) => _renderer?.SetEffectModes(modes);
 
     public void StartMonitorCapture(IntPtr monitor, ScreenTransformMode mode)
     {
         if (_renderer is null)
         {
-            throw new InvalidOperationException(
-                "The Direct3D preview surface has not been created yet.");
+            throw new InvalidOperationException("The Direct3D preview surface has not been created yet.");
         }
-
         RefreshSurfaceSize();
         _renderer.StartMonitorCapture(monitor, mode);
         Dispatcher.BeginInvoke(RefreshSurfaceSize);
@@ -66,6 +58,7 @@ public sealed class D3D11PreviewHost : HwndHost
                           NativeMethods.WS_CLIPSIBLINGS,
             ExtendedWindowStyle =
                 NativeMethods.WS_EX_TRANSPARENT |
+                NativeMethods.WS_EX_LAYERED |
                 NativeMethods.WS_EX_TOOLWINDOW |
                 NativeMethods.WS_EX_NOACTIVATE,
             Width = Math.Max(1, (int)ActualWidth),
@@ -74,19 +67,17 @@ public sealed class D3D11PreviewHost : HwndHost
 
         _childSource = new HwndSource(parameters);
         _childSource.AddHook(ChildWindowProcedure);
-
         IntPtr childWindow = _childSource.Handle;
-        int style = NativeMethods.GetWindowLong(
-            childWindow,
-            NativeMethods.GWL_EXSTYLE);
-
+        int style = NativeMethods.GetWindowLong(childWindow, NativeMethods.GWL_EXSTYLE);
         NativeMethods.SetWindowLong(
             childWindow,
             NativeMethods.GWL_EXSTYLE,
             style |
             NativeMethods.WS_EX_TRANSPARENT |
+            NativeMethods.WS_EX_LAYERED |
             NativeMethods.WS_EX_TOOLWINDOW |
             NativeMethods.WS_EX_NOACTIVATE);
+        NativeMethods.SetLayeredWindowAttributes(childWindow, 0, byte.MaxValue, NativeMethods.LWA_ALPHA);
 
         _renderer = new D3D11ScreenEffectRenderer(childWindow);
         RefreshSurfaceSize();
@@ -97,23 +88,19 @@ public sealed class D3D11PreviewHost : HwndHost
     {
         D3D11ScreenEffectRenderer? renderer = _renderer;
         _renderer = null;
-
         try
         {
             renderer?.Dispose();
         }
         catch (Exception exception)
         {
-            CrashLogService.WriteException(
-                "PREVIEW HOST RENDERER CLEANUP",
-                exception);
+            CrashLogService.WriteException("PREVIEW HOST RENDERER CLEANUP", exception);
         }
 
         if (_childSource is not null)
         {
             HwndSource childSource = _childSource;
             _childSource = null;
-
             try
             {
                 childSource.RemoveHook(ChildWindowProcedure);
@@ -124,9 +111,7 @@ public sealed class D3D11PreviewHost : HwndHost
             }
             catch (Exception exception)
             {
-                CrashLogService.WriteException(
-                    "PREVIEW HOST HWND CLEANUP",
-                    exception);
+                CrashLogService.WriteException("PREVIEW HOST HWND CLEANUP", exception);
             }
         }
     }
@@ -143,24 +128,16 @@ public sealed class D3D11PreviewHost : HwndHost
         {
             return;
         }
-
         IntPtr childWindow = _childSource.Handle;
         if (!NativeMethods.GetClientRect(childWindow, out NativeRect clientRectangle))
         {
             return;
         }
-
         DpiScale dpi = VisualTreeHelper.GetDpi(this);
         int arrangedWidth = (int)Math.Round(ActualWidth * dpi.DpiScaleX);
         int arrangedHeight = (int)Math.Round(ActualHeight * dpi.DpiScaleY);
-
-        int width = Math.Max(
-            1,
-            arrangedWidth > 1 ? arrangedWidth : clientRectangle.Width);
-        int height = Math.Max(
-            1,
-            arrangedHeight > 1 ? arrangedHeight : clientRectangle.Height);
-
+        int width = Math.Max(1, arrangedWidth > 1 ? arrangedWidth : clientRectangle.Width);
+        int height = Math.Max(1, arrangedHeight > 1 ? arrangedHeight : clientRectangle.Height);
         NativeMethods.SetWindowPos(
             childWindow,
             IntPtr.Zero,
@@ -168,26 +145,17 @@ public sealed class D3D11PreviewHost : HwndHost
             0,
             width,
             height,
-            NativeMethods.SWP_NOZORDER |
-            NativeMethods.SWP_NOACTIVATE |
-            NativeMethods.SWP_SHOWWINDOW);
-
+            NativeMethods.SWP_NOZORDER | NativeMethods.SWP_NOACTIVATE | NativeMethods.SWP_SHOWWINDOW);
         _renderer.Resize(width, height);
     }
 
-    private static IntPtr ChildWindowProcedure(
-        IntPtr hwnd,
-        int message,
-        IntPtr wParam,
-        IntPtr lParam,
-        ref bool handled)
+    private static IntPtr ChildWindowProcedure(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
         if (message == WmNcHitTest)
         {
             handled = true;
             return HtTransparent;
         }
-
         return IntPtr.Zero;
     }
 }
