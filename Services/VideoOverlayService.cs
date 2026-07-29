@@ -14,7 +14,8 @@ public sealed record VideoOverlayOptions(
     double Volume,
     Stretch Stretch,
     bool Loop,
-    TimeSpan MaximumDuration);
+    TimeSpan MaximumDuration,
+    bool TransparentBackground = true);
 
 public sealed class VideoOverlayService : IDisposable
 {
@@ -80,7 +81,13 @@ public sealed class VideoOverlayService : IDisposable
             Stretch = options.Stretch,
             Volume = Math.Clamp(options.Volume, 0, 1),
             Opacity = Math.Clamp(options.Opacity, 0.05, 1),
-            IsHitTestVisible = false
+            IsHitTestVisible = false,
+            ScrubbingEnabled = true
+        };
+        _media.MediaOpened += (_, _) =>
+        {
+            _media.Position = TimeSpan.Zero;
+            _media.Play();
         };
         _media.MediaEnded += (_, _) =>
         {
@@ -100,21 +107,28 @@ public sealed class VideoOverlayService : IDisposable
 
         Grid transparentSurface = new()
         {
-            Background = Brushes.Transparent,
+            Background = options.TransparentBackground
+                ? Brushes.Transparent
+                : Brushes.Black,
             IsHitTestVisible = false
         };
         transparentSurface.Children.Add(_media);
 
         _window = new Window
         {
-            AllowsTransparency = true,
-            Background = Brushes.Transparent,
+            // MediaElement's hardware-backed video surface is unreliable in
+            // a layered AllowsTransparency window. Full-screen videos use an
+            // ordinary opaque borderless HWND while remaining click-through.
+            AllowsTransparency = options.TransparentBackground,
+            Background = options.TransparentBackground
+                ? Brushes.Transparent
+                : Brushes.Black,
             WindowStyle = WindowStyle.None,
             ResizeMode = ResizeMode.NoResize,
             ShowInTaskbar = false,
             ShowActivated = false,
             Topmost = true,
-            WindowState = WindowState.Maximized,
+            WindowState = WindowState.Normal,
             Content = transparentSurface,
             IsHitTestVisible = false
         };
@@ -129,7 +143,6 @@ public sealed class VideoOverlayService : IDisposable
                 activate: false);
         };
         _window.Show();
-        _media.Play();
     }
 
     private void CloseWindow()
