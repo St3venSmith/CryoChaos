@@ -95,6 +95,9 @@ public sealed class VideoOverlayService : IDisposable
         _media = new VlcMedia(
             _libVlc,
             new Uri(fullPath));
+        // Software decoding avoids the black-frame hardware-video-overlay
+        // path seen on some systems while Destiny is using the GPU.
+        _media.AddOption(":avcodec-hw=none");
         _videoView = new VideoView
         {
             MediaPlayer = _mediaPlayer,
@@ -124,9 +127,14 @@ public sealed class VideoOverlayService : IDisposable
             }
         };
         _mediaPlayer.EncounteredError += (_, _) =>
+        {
+            CrashLogService.Write(
+                "VIDEO",
+                $"LibVLC reported a playback error for '{fullPath}'.");
             playbackEnded.TrySetException(
                 new InvalidOperationException(
                     $"LibVLC could not play '{fullPath}'."));
+        };
 
         _window = new Window
         {
@@ -154,6 +162,7 @@ public sealed class VideoOverlayService : IDisposable
                 _window,
                 activate: false);
         };
+        bool playbackStarted = false;
         _window.ContentRendered += (_, _) =>
         {
             IntPtr hwnd = new WindowInteropHelper(_window).Handle;
@@ -166,15 +175,29 @@ public sealed class VideoOverlayService : IDisposable
                     return true;
                 },
                 IntPtr.Zero);
+
+            // VideoView creates its native rendering HWND during layout.
+            // Starting before ContentRendered can make LibVLC play into no
+            // target at all, leaving only the black parent window visible.
+            if (playbackStarted)
+            {
+                return;
+            }
+
+            playbackStarted = true;
+            CrashLogService.Write(
+                "VIDEO",
+                $"Starting video overlay '{fullPath}'.");
+            if (_mediaPlayer is null ||
+                _media is null ||
+                !_mediaPlayer.Play(_media))
+            {
+                playbackEnded.TrySetException(
+                    new InvalidOperationException(
+                        $"LibVLC refused to start '{fullPath}'."));
+            }
         };
         _window.Show();
-
-        if (!_mediaPlayer.Play(_media))
-        {
-            playbackEnded.TrySetException(
-                new InvalidOperationException(
-                    $"LibVLC refused to start '{fullPath}'."));
-        }
     }
 
     private void CloseWindow()
