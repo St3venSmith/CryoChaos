@@ -256,6 +256,12 @@ public partial class MainWindow : Window
     {
         if (_screenFilterLab is { IsLoaded: true })
         {
+            if (!_screenFilterLab.IsVisible)
+            {
+                _screenFilterLab.Show();
+            }
+
+            _screenFilterLab.Topmost = true;
             _screenFilterLab.Activate();
             return;
         }
