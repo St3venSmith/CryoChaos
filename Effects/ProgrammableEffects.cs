@@ -85,7 +85,9 @@ public abstract class CustomSoundChaosEffectBase : SoundChaosEffectBase
     protected sealed override ChaosSoundSource Source => ChaosSoundSource.WaveFile;
 }
 
-public abstract class QteChaosEffectBase : IChaosEffect
+public abstract class QteChaosEffectBase :
+    IChaosEffect,
+    IInteractiveChallengeEffect
 {
     public abstract ChaosEffectDefinition Definition { get; }
     protected virtual IReadOnlyList<ushort> AllowedKeys =>
@@ -102,6 +104,8 @@ public abstract class QteChaosEffectBase : IChaosEffect
 
     public async Task RunAsync(ChaosEffectContext context, CancellationToken cancellationToken)
     {
+        context.CancelConflictingInputEffects();
+
         if (!await RepeatingKeyChaosEffectBase.FocusDestinyAsync(cancellationToken))
         {
             return;
@@ -230,7 +234,9 @@ public sealed class WarningSoundEffect : SoundChaosEffectBase
     protected override TimeSpan RepeatDelay => TimeSpan.FromMilliseconds(600);
 }
 
-public abstract class MathChallengeEffectBase : IChaosEffect
+public abstract class MathChallengeEffectBase :
+    IChaosEffect,
+    IInteractiveChallengeEffect
 {
     public abstract ChaosEffectDefinition Definition { get; }
     protected virtual int FailureEffectCount => 2;
@@ -240,6 +246,8 @@ public abstract class MathChallengeEffectBase : IChaosEffect
 
     public async Task RunAsync(ChaosEffectContext context, CancellationToken cancellationToken)
     {
+        context.CancelConflictingInputEffects();
+
         if (!await RepeatingKeyChaosEffectBase.FocusDestinyAsync(cancellationToken))
         {
             return;
