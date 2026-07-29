@@ -57,6 +57,9 @@ internal sealed unsafe class D3D11ScreenEffectRenderer : IDisposable
     private ID3D11Texture2D compositionTexture = null!;
     private ID3D11ShaderResourceView compositionView = null!;
     private ID3D11RenderTargetView compositionTarget = null!;
+    private ID3D11Texture2D compositionTextureB = null!;
+    private ID3D11ShaderResourceView compositionViewB = null!;
+    private ID3D11RenderTargetView compositionTargetB = null!;
     private ID3D11VertexShader vertexShader = null!;
     private ID3D11PixelShader pixelShader = null!;
     private ID3D11SamplerState sampler = null!;
@@ -75,8 +78,7 @@ internal sealed unsafe class D3D11ScreenEffectRenderer : IDisposable
     private GraphicsCaptureSession? session;
     private bool disposed;
     private bool captureFaulted;
-    private ScreenTransformMode mode;
-    private ScreenTransformMode secondaryMode;
+    private ScreenTransformMode[] effectModes = [ScreenTransformMode.None];
     private ScreenFilterSettings filterSettings = ScreenFilterSettings.Default;
     private readonly Stopwatch effectClock = Stopwatch.StartNew();
     private readonly Stopwatch fpsClock = Stopwatch.StartNew();
@@ -98,12 +100,12 @@ internal sealed unsafe class D3D11ScreenEffectRenderer : IDisposable
 
     public ScreenTransformMode Mode
     {
-        get => mode;
+        get => effectModes.ElementAtOrDefault(0);
         set
         {
             lock (sync)
             {
-                mode = value;
+                effectModes = [value];
                 effectClock.Restart();
                 lastFrozenFrameBucket = -1;
             }
@@ -114,13 +116,7 @@ internal sealed unsafe class D3D11ScreenEffectRenderer : IDisposable
     {
         lock (sync)
         {
-            ScreenTransformMode[] normalized = modes
-                .Where(value => value != ScreenTransformMode.None)
-                .Distinct()
-                .Take(2)
-                .ToArray();
-            mode = normalized.ElementAtOrDefault(0);
-            secondaryMode = normalized.ElementAtOrDefault(1);
+            effectModes = NormalizeEffectModes(modes);
             effectClock.Restart();
             lastFrozenFrameBucket = -1;
             ClearFeedbackBuffer();
@@ -269,7 +265,7 @@ internal sealed unsafe class D3D11ScreenEffectRenderer : IDisposable
 
     private void CreateCompositionBuffer()
     {
-        compositionTexture = device.CreateTexture2D(new Texture2DDescription
+        Texture2DDescription description = new()
         {
             Width = (uint)outputWidth,
             Height = (uint)outputHeight,
@@ -279,9 +275,13 @@ internal sealed unsafe class D3D11ScreenEffectRenderer : IDisposable
             SampleDescription = SampleDescription.Default,
             Usage = ResourceUsage.Default,
             BindFlags = BindFlags.ShaderResource | BindFlags.RenderTarget
-        });
+        };
+        compositionTexture = device.CreateTexture2D(description);
         compositionView = device.CreateShaderResourceView(compositionTexture);
         compositionTarget = device.CreateRenderTargetView(compositionTexture);
+        compositionTextureB = device.CreateTexture2D(description);
+        compositionViewB = device.CreateShaderResourceView(compositionTextureB);
+        compositionTargetB = device.CreateRenderTargetView(compositionTextureB);
     }
 
     public void Resize(int width, int height)
@@ -294,6 +294,9 @@ internal sealed unsafe class D3D11ScreenEffectRenderer : IDisposable
             outputWidth = width;
             outputHeight = height;
             context.ClearState();
+            compositionTargetB.Dispose();
+            compositionViewB.Dispose();
+            compositionTextureB.Dispose();
             compositionTarget.Dispose();
             compositionView.Dispose();
             compositionTexture.Dispose();
@@ -340,13 +343,7 @@ internal sealed unsafe class D3D11ScreenEffectRenderer : IDisposable
         IReadOnlyList<ScreenTransformMode> effectModes)
     {
         StopCaptureCore();
-        ScreenTransformMode[] normalized = effectModes
-            .Where(value => value != ScreenTransformMode.None)
-            .Distinct()
-            .Take(2)
-            .ToArray();
-        mode = normalized.ElementAtOrDefault(0);
-        secondaryMode = normalized.ElementAtOrDefault(1);
+        this.effectModes = NormalizeEffectModes(effectModes);
         effectClock.Restart();
         fpsClock.Restart();
         framesSinceFpsUpdate = 0;
@@ -490,8 +487,7 @@ internal sealed unsafe class D3D11ScreenEffectRenderer : IDisposable
 
     private bool ShouldRenderFrame()
     {
-        if (mode == ScreenTransformMode.FrameBufferFreeze ||
-            secondaryMode == ScreenTransformMode.FrameBufferFreeze)
+        if (effectModes.Contains(ScreenTransformMode.FrameBufferFreeze))
         {
             // Present one fresh capture, then deliberately retain that swap-
             // chain frame until the next bucket. This is an actual held frame,
@@ -537,12 +533,9 @@ internal sealed unsafe class D3D11ScreenEffectRenderer : IDisposable
 
     private void Render(ID3D11ShaderResourceView frameView)
     {
-        bool hasSecondPass = secondaryMode != ScreenTransformMode.None;
-        bool feedbackMode = IsFeedbackMode(mode) ||
-            IsFeedbackMode(secondaryMode);
-        int quarterTurns =
-            (IsQuarterTurn(mode) ? 1 : 0) +
-            (IsQuarterTurn(secondaryMode) ? 1 : 0);
+        ScreenTransformMode[] modes = effectModes;
+        bool feedbackMode = modes.Any(IsFeedbackMode);
+        int quarterTurns = modes.Count(IsQuarterTurn);
         bool quarterTurn = quarterTurns % 2 != 0;
         float sourceAspect = quarterTurn
             ? (float)sourceHeight / sourceWidth
@@ -568,29 +561,29 @@ internal sealed unsafe class D3D11ScreenEffectRenderer : IDisposable
         Viewport fullViewport = new(
             0, 0, outputWidth, outputHeight, 0, 1);
 
-        if (hasSecondPass)
+        ID3D11ShaderResourceView passSource = frameView;
+        for (int index = 0; index < modes.Length; index++)
         {
+            bool finalPass = index == modes.Length - 1;
+            ID3D11RenderTargetView passTarget = finalPass
+                ? renderTarget
+                : index % 2 == 0
+                    ? compositionTarget
+                    : compositionTargetB;
+
             DrawPass(
-                frameView,
-                compositionTarget,
-                mode,
-                fittedViewport,
-                applyColorSettings: false);
-            DrawPass(
-                compositionView,
-                renderTarget,
-                secondaryMode,
-                fullViewport,
-                applyColorSettings: true);
-        }
-        else
-        {
-            DrawPass(
-                frameView,
-                renderTarget,
-                mode,
-                fittedViewport,
-                applyColorSettings: true);
+                passSource,
+                passTarget,
+                modes[index],
+                index == 0 ? fittedViewport : fullViewport,
+                applyColorSettings: finalPass);
+
+            if (!finalPass)
+            {
+                passSource = index % 2 == 0
+                    ? compositionView
+                    : compositionViewB;
+            }
         }
 
         if (feedbackMode)
@@ -667,6 +660,19 @@ internal sealed unsafe class D3D11ScreenEffectRenderer : IDisposable
         value is ScreenTransformMode.PortalVoid or
             ScreenTransformMode.UnclearedFrameBuffer;
 
+    private static ScreenTransformMode[] NormalizeEffectModes(
+        IReadOnlyList<ScreenTransformMode> modes)
+    {
+        ScreenTransformMode[] normalized = modes
+            .Where(value => value != ScreenTransformMode.None)
+            .Distinct()
+            .ToArray();
+
+        return normalized.Length == 0
+            ? [ScreenTransformMode.None]
+            : normalized;
+    }
+
     public void Dispose()
     {
         lock (sync)
@@ -697,6 +703,9 @@ internal sealed unsafe class D3D11ScreenEffectRenderer : IDisposable
             DisposeSafely(pixelShader, "pixel shader");
             DisposeSafely(vertexShader, "vertex shader");
             DisposeSafely(renderTarget, "render target");
+            DisposeSafely(compositionTargetB, "composition render target B");
+            DisposeSafely(compositionViewB, "composition shader view B");
+            DisposeSafely(compositionTextureB, "composition texture B");
             DisposeSafely(compositionTarget, "composition render target");
             DisposeSafely(compositionView, "composition shader view");
             DisposeSafely(compositionTexture, "composition texture");
