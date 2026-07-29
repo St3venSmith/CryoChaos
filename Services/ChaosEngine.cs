@@ -521,6 +521,9 @@ public sealed class ChaosEngine : IDisposable
                         selectedLevel,
                         requireDestinyForeground,
                         cancellationToken),
+                CancelConflictingInputEffects = () =>
+                    CancelConflictingInputEffects(
+                        effect.Definition.Id),
                 ScreenTransform = _screenTransform,
                 Random = _random,
                 RequireDestinyForeground =
@@ -608,8 +611,27 @@ public sealed class ChaosEngine : IDisposable
     {
         ActiveEffect[] active = activeEffects.ToArray();
         bool candidateIsMouse = candidate is RawMouseChaosEffectBase;
+        bool candidateIsInteractive =
+            candidate is IInteractiveChallengeEffect;
         bool candidateIsScreen =
             candidate.Definition.Type == ChaosEffectType.ScreenTransform;
+
+        bool interactiveIsActive = active.Any(item =>
+            item.Effect is IInteractiveChallengeEffect);
+
+        // A challenge needs unambiguous physical input. It may coexist with
+        // visual/audio effects, but never with another challenge or an input
+        // effect that can inject keys into its answer.
+        if (candidateIsInteractive)
+        {
+            return !interactiveIsActive;
+        }
+
+        if (interactiveIsActive &&
+            candidate.Definition.Type == ChaosEffectType.Keybind)
+        {
+            return false;
+        }
 
         // Raw-mouse modifiers share one interception pipeline. Only one mouse
         // modifier may run at a time, but it must not prevent an unrelated
@@ -676,6 +698,29 @@ public sealed class ChaosEngine : IDisposable
                 .Where(pair => !pair.Key.Equals(
                     currentEffectId,
                     StringComparison.OrdinalIgnoreCase))
+                .Select(pair => pair.Value)
+                .ToArray();
+        }
+
+        foreach (ActiveEffect effect in toCancel)
+        {
+            TryCancel(effect.Cancellation);
+        }
+    }
+
+    private void CancelConflictingInputEffects(
+        string currentEffectId)
+    {
+        ActiveEffect[] toCancel;
+        lock (_sync)
+        {
+            toCancel = _activeEffects
+                .Where(pair =>
+                    !pair.Key.Equals(
+                        currentEffectId,
+                        StringComparison.OrdinalIgnoreCase) &&
+                    pair.Value.Effect.Definition.Type ==
+                        ChaosEffectType.Keybind)
                 .Select(pair => pair.Value)
                 .ToArray();
         }
