@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
+using System.Windows.Input;
 using System.Windows.Threading;
 using CryoChaos.Models;
 using CryoChaos.Services;
@@ -11,12 +12,11 @@ public partial class CaptureDiagnosticWindow : Window
 {
     private const int GwlExStyle = -20;
     private const long WsExTransparent = 0x00000020L;
-    private const long WsExLayered = 0x00080000L;
     private const long WsExToolWindow = 0x00000080L;
     private const long WsExNoActivate = 0x08000000L;
-    private const uint LwaAlpha = 0x00000002;
     private const int WmNcHitTest = 0x0084;
     private const int WmMouseActivate = 0x0021;
+    private const int WmSetCursor = 0x0020;
     private static readonly IntPtr HtTransparent = new(-1);
     private static readonly IntPtr MaNoActivate = new(3);
     private static readonly IntPtr HwndTopmost = new(-1);
@@ -35,6 +35,7 @@ public partial class CaptureDiagnosticWindow : Window
     private DateTime _startedAt;
     private HwndSource? _hwndSource;
     private bool _promotedToOverlay;
+    private int _cursorHideCalls;
 
     public CaptureDiagnosticWindow(IntPtr destinyWindow, bool captureMonitor)
     {
@@ -65,12 +66,11 @@ public partial class CaptureDiagnosticWindow : Window
         MinWidth = 1;
         MinHeight = 1;
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
-        WindowStyle = WindowStyle.None;
-        ResizeMode = ResizeMode.NoResize;
-        Topmost = false;
         ShowActivated = false;
         ShowInTaskbar = false;
         Focusable = false;
+        Cursor = Cursors.None;
+        ForceCursor = true;
         HelpText.Text = "Waiting for the first captured frame...";
         _statusTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
         _statusTimer.Tick += StatusTimer_Tick;
@@ -140,6 +140,10 @@ public partial class CaptureDiagnosticWindow : Window
         DiagnosticsRow.Height = new GridLength(0);
         PreviewBorder.Margin = new Thickness(0);
         PreviewBorder.BorderThickness = new Thickness(0);
+        WindowStyle = WindowStyle.None;
+        ResizeMode = ResizeMode.NoResize;
+        Topmost = true;
+
         NativeRect bounds = DestinyWindowService.GetMonitorBounds(_destinyWindow);
         uint dpi = GetDpiForWindow(_destinyWindow);
         double scale = (dpi == 0 ? 96.0 : dpi) / 96.0;
@@ -150,10 +154,18 @@ public partial class CaptureDiagnosticWindow : Window
         SetWindowPos(NativeHandle, HwndTopmost, bounds.Left, bounds.Top, bounds.Width, bounds.Height, SwpNoActivate | SwpShowWindow);
         LiveRenderer.RefreshSurfaceSize();
 
+        int cursorCount;
+        do
+        {
+            cursorCount = ShowCursor(false);
+            _cursorHideCalls++;
+        }
+        while (cursorCount >= 0 && _cursorHideCalls < 32);
+        SetCursor(IntPtr.Zero);
+
         IntPtr currentStyle = GetWindowLongPtr(NativeHandle, GwlExStyle);
-        long clickThroughStyle = currentStyle.ToInt64() | WsExTransparent | WsExLayered | WsExToolWindow | WsExNoActivate;
+        long clickThroughStyle = currentStyle.ToInt64() | WsExTransparent | WsExToolWindow | WsExNoActivate;
         SetWindowLongPtr(NativeHandle, GwlExStyle, new IntPtr(clickThroughStyle));
-        SetLayeredWindowAttributes(NativeHandle, 0, byte.MaxValue, LwaAlpha);
         SetWindowPos(NativeHandle, IntPtr.Zero, 0, 0, 0, 0, SwpNoSize | SwpNoMove | SwpNoZOrder | SwpNoActivate | SwpFrameChanged);
     }
 
@@ -161,12 +173,6 @@ public partial class CaptureDiagnosticWindow : Window
     {
         _hwndSource = HwndSource.FromHwnd(NativeHandle);
         _hwndSource?.AddHook(WindowProcedure);
-        if (_isEffectOverlay)
-        {
-            IntPtr currentStyle = GetWindowLongPtr(NativeHandle, GwlExStyle);
-            SetWindowLongPtr(NativeHandle, GwlExStyle, new IntPtr(currentStyle.ToInt64() | WsExTransparent | WsExLayered | WsExToolWindow | WsExNoActivate));
-            SetLayeredWindowAttributes(NativeHandle, 0, byte.MaxValue, LwaAlpha);
-        }
     }
 
     private IntPtr WindowProcedure(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
@@ -181,6 +187,12 @@ public partial class CaptureDiagnosticWindow : Window
             handled = true;
             return MaNoActivate;
         }
+        if (_isEffectOverlay && message == WmSetCursor)
+        {
+            SetCursor(IntPtr.Zero);
+            handled = true;
+            return new IntPtr(1);
+        }
         return IntPtr.Zero;
     }
 
@@ -188,6 +200,11 @@ public partial class CaptureDiagnosticWindow : Window
     {
         _statusTimer.Stop();
         LiveRenderer.StopCapture();
+        while (_cursorHideCalls > 0)
+        {
+            ShowCursor(true);
+            _cursorHideCalls--;
+        }
         if (_hwndSource is not null)
         {
             _hwndSource.RemoveHook(WindowProcedure);
@@ -197,6 +214,12 @@ public partial class CaptureDiagnosticWindow : Window
 
     [DllImport("user32.dll")]
     private static extern uint GetDpiForWindow(IntPtr hwnd);
+
+    [DllImport("user32.dll")]
+    private static extern int ShowCursor([MarshalAs(UnmanagedType.Bool)] bool show);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr SetCursor(IntPtr cursor);
 
     private static IntPtr GetWindowLongPtr(IntPtr hwnd, int index) =>
         IntPtr.Size == 8 ? GetWindowLongPtr64(hwnd, index) : new IntPtr(GetWindowLong32(hwnd, index));
@@ -212,10 +235,6 @@ public partial class CaptureDiagnosticWindow : Window
     private static extern int SetWindowLong32(IntPtr hwnd, int index, int newValue);
     [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW")]
     private static extern IntPtr SetWindowLongPtr64(IntPtr hwnd, int index, IntPtr newValue);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool SetLayeredWindowAttributes(IntPtr hwnd, uint colorKey, byte alpha, uint flags);
 
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
