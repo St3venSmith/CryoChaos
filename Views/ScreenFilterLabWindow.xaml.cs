@@ -42,6 +42,8 @@ public partial class ScreenFilterLabWindow : Window
         LoadProfile();
         _ready = true;
         UpdateSelectedEffectCount();
+        Topmost = true;
+        Activate();
     }
 
     private void StartButton_Click(object sender, RoutedEventArgs e)
@@ -70,17 +72,8 @@ public partial class ScreenFilterLabWindow : Window
             StatusTextBlock.Text =
                 "Running persistently — click-through and non-activating";
 
-            if (AlwaysOnTopCheckBox.IsChecked == true)
-            {
-                Topmost = true;
-                Activate();
-            }
-            else
-            {
-                // In play mode only the native surface remains topmost.
-                Topmost = false;
-                ForegroundWindowService.TryActivateDestinyWindow();
-            }
+            Topmost = true;
+            Activate();
         }
         catch (Exception exception)
         {
@@ -98,28 +91,11 @@ public partial class ScreenFilterLabWindow : Window
     private void StopButton_Click(object sender, RoutedEventArgs e) =>
         StopOverlay();
 
-    private void AlwaysOnTopCheckBox_Changed(
+    private void HideLabButton_Click(
         object sender,
         RoutedEventArgs e)
     {
-        if (!_ready || sender is not CheckBox checkBox)
-        {
-            return;
-        }
-
-        Topmost = checkBox.IsChecked == true;
-        if (Topmost)
-        {
-            Activate();
-        }
-    }
-
-    private void PlayDestinyButton_Click(
-        object sender,
-        RoutedEventArgs e)
-    {
-        AlwaysOnTopCheckBox.IsChecked = false;
-        Topmost = false;
+        Hide();
         ForegroundWindowService.TryActivateDestinyWindow();
     }
 
