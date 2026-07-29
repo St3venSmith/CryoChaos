@@ -56,11 +56,6 @@ public sealed class D3D11PreviewHost : HwndHost
                           NativeMethods.WS_VISIBLE |
                           NativeMethods.WS_CLIPCHILDREN |
                           NativeMethods.WS_CLIPSIBLINGS,
-            ExtendedWindowStyle =
-                NativeMethods.WS_EX_TRANSPARENT |
-                NativeMethods.WS_EX_LAYERED |
-                NativeMethods.WS_EX_TOOLWINDOW |
-                NativeMethods.WS_EX_NOACTIVATE,
             Width = Math.Max(1, (int)ActualWidth),
             Height = Math.Max(1, (int)ActualHeight)
         };
@@ -69,15 +64,13 @@ public sealed class D3D11PreviewHost : HwndHost
         _childSource.AddHook(ChildWindowProcedure);
         IntPtr childWindow = _childSource.Handle;
         int style = NativeMethods.GetWindowLong(childWindow, NativeMethods.GWL_EXSTYLE);
+
         NativeMethods.SetWindowLong(
             childWindow,
             NativeMethods.GWL_EXSTYLE,
             style |
-            NativeMethods.WS_EX_TRANSPARENT |
-            NativeMethods.WS_EX_LAYERED |
             NativeMethods.WS_EX_TOOLWINDOW |
             NativeMethods.WS_EX_NOACTIVATE);
-        NativeMethods.SetLayeredWindowAttributes(childWindow, 0, byte.MaxValue, NativeMethods.LWA_ALPHA);
 
         _renderer = new D3D11ScreenEffectRenderer(childWindow);
         RefreshSurfaceSize();
