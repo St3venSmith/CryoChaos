@@ -18,7 +18,8 @@ public sealed record VideoOverlayOptions(
     Stretch Stretch,
     bool Loop,
     TimeSpan MaximumDuration,
-    bool TransparentBackground = true);
+    bool TransparentBackground = true,
+    bool HideCursor = false);
 
 public sealed class VideoOverlayService : IDisposable
 {
@@ -33,6 +34,7 @@ public sealed class VideoOverlayService : IDisposable
     private LibVLC? _libVlc;
     private VlcMedia? _media;
     private VlcMediaPlayer? _mediaPlayer;
+    private int _cursorHideCalls;
 
     public VideoOverlayService(Dispatcher dispatcher)
     {
@@ -198,6 +200,11 @@ public sealed class VideoOverlayService : IDisposable
             }
         };
         _window.Show();
+
+        if (options.HideCursor)
+        {
+            HideSystemCursor();
+        }
     }
 
     private void CloseWindow()
@@ -209,6 +216,7 @@ public sealed class VideoOverlayService : IDisposable
 
         _dispatcher.Invoke(() =>
         {
+            RestoreSystemCursor();
             _mediaPlayer?.Stop();
             _window?.Close();
 
@@ -233,6 +241,26 @@ public sealed class VideoOverlayService : IDisposable
     {
         CloseWindow();
         _gate.Dispose();
+    }
+
+    private void HideSystemCursor()
+    {
+        // ShowCursor uses a reference count. Remember every decrement so the
+        // exact prior state can be restored when the video effect finishes.
+        do
+        {
+            _cursorHideCalls++;
+        }
+        while (ShowCursor(false) >= 0);
+    }
+
+    private void RestoreSystemCursor()
+    {
+        while (_cursorHideCalls > 0)
+        {
+            ShowCursor(true);
+            _cursorHideCalls--;
+        }
     }
 
     private static void MakeWindowClickThrough(IntPtr window)
@@ -268,4 +296,8 @@ public sealed class VideoOverlayService : IDisposable
         IntPtr parent,
         EnumWindowProcedure callback,
         IntPtr parameter);
+
+    [DllImport("user32.dll")]
+    private static extern int ShowCursor(
+        [MarshalAs(UnmanagedType.Bool)] bool show);
 }
