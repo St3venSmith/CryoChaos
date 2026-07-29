@@ -20,6 +20,18 @@ public partial class ScreenFilterLabWindow : Window
     public ScreenFilterLabWindow()
     {
         InitializeComponent();
+        Loaded += ScreenFilterLabWindow_Loaded;
+        Closed += (_, _) => StopOverlay();
+    }
+
+    private void ScreenFilterLabWindow_Loaded(
+        object sender,
+        RoutedEventArgs e)
+    {
+        if (_ready)
+        {
+            return;
+        }
 
         ScreenTransformMode[] modes =
             Enum.GetValues<ScreenTransformMode>()
@@ -29,7 +41,7 @@ public partial class ScreenFilterLabWindow : Window
 
         LoadProfile();
         _ready = true;
-        Closed += (_, _) => StopOverlay();
+        UpdateSelectedEffectCount();
     }
 
     private void StartButton_Click(object sender, RoutedEventArgs e)
@@ -58,10 +70,8 @@ public partial class ScreenFilterLabWindow : Window
             StatusTextBlock.Text =
                 "Running persistently — click-through and non-activating";
 
-            if (EditOverGameCheckBox.IsChecked == true)
+            if (AlwaysOnTopCheckBox.IsChecked == true)
             {
-                // Bring the controls above the click-through render surface
-                // while the user edits. Destiny remains visible underneath.
                 Topmost = true;
                 Activate();
             }
@@ -88,11 +98,16 @@ public partial class ScreenFilterLabWindow : Window
     private void StopButton_Click(object sender, RoutedEventArgs e) =>
         StopOverlay();
 
-    private void EditOverGameCheckBox_Changed(
+    private void AlwaysOnTopCheckBox_Changed(
         object sender,
         RoutedEventArgs e)
     {
-        Topmost = EditOverGameCheckBox.IsChecked == true;
+        if (!_ready || sender is not CheckBox checkBox)
+        {
+            return;
+        }
+
+        Topmost = checkBox.IsChecked == true;
         if (Topmost)
         {
             Activate();
@@ -103,7 +118,7 @@ public partial class ScreenFilterLabWindow : Window
         object sender,
         RoutedEventArgs e)
     {
-        EditOverGameCheckBox.IsChecked = false;
+        AlwaysOnTopCheckBox.IsChecked = false;
         Topmost = false;
         ForegroundWindowService.TryActivateDestinyWindow();
     }
@@ -122,9 +137,33 @@ public partial class ScreenFilterLabWindow : Window
             return;
         }
 
+        UpdateSelectedEffectCount();
         _overlay?.SetEffectModes(GetEffectModes());
         _overlay?.SetFilterSettings(GetSettings());
         SaveProfile();
+    }
+
+    private void SelectAllShadersButton_Click(
+        object sender,
+        RoutedEventArgs e)
+    {
+        EffectStackListBox.SelectAll();
+    }
+
+    private void ClearShadersButton_Click(
+        object sender,
+        RoutedEventArgs e)
+    {
+        EffectStackListBox.UnselectAll();
+    }
+
+    private void UpdateSelectedEffectCount()
+    {
+        int count = EffectStackListBox.SelectedItems.Count;
+        SelectedEffectCountTextBlock.Text =
+            count == 1
+                ? "1 effect enabled"
+                : $"{count} effects enabled";
     }
 
     private IReadOnlyList<ScreenTransformMode> GetEffectModes()
@@ -189,11 +228,13 @@ public partial class ScreenFilterLabWindow : Window
         {
             Directory.CreateDirectory(
                 Path.GetDirectoryName(ProfilePath)!);
-            ScreenFilterProfile profile = new(
-                GetEffectModes()
+            ScreenFilterProfile profile = new()
+            {
+                Modes = GetEffectModes()
                     .Where(mode => mode != ScreenTransformMode.None)
                     .ToArray(),
-                GetSettings());
+                Settings = GetSettings()
+            };
             File.WriteAllText(
                 ProfilePath,
                 JsonSerializer.Serialize(
@@ -223,13 +264,25 @@ public partial class ScreenFilterLabWindow : Window
                     File.ReadAllText(ProfilePath));
             if (profile is null)
             {
+                ApplySettings(ScreenFilterSettings.Default);
                 return;
             }
 
             EffectStackListBox.UnselectAll();
-            foreach (ScreenTransformMode mode in profile.Modes)
+            ScreenTransformMode[] savedModes =
+                profile.Modes ??
+                new[] { profile.Primary, profile.Secondary }
+                    .Where(mode => mode.HasValue)
+                    .Select(mode => mode!.Value)
+                    .ToArray();
+
+            foreach (ScreenTransformMode mode in savedModes)
             {
-                EffectStackListBox.SelectedItems.Add(mode);
+                if (mode != ScreenTransformMode.None &&
+                    EffectStackListBox.Items.Contains(mode))
+                {
+                    EffectStackListBox.SelectedItems.Add(mode);
+                }
             }
             ApplySettings(profile.Settings);
         }
@@ -242,7 +295,12 @@ public partial class ScreenFilterLabWindow : Window
         }
     }
 
-    private sealed record ScreenFilterProfile(
-        ScreenTransformMode[] Modes,
-        ScreenFilterSettings Settings);
+    private sealed class ScreenFilterProfile
+    {
+        public ScreenTransformMode[]? Modes { get; init; }
+        public ScreenTransformMode? Primary { get; init; }
+        public ScreenTransformMode? Secondary { get; init; }
+        public ScreenFilterSettings Settings { get; init; } =
+            ScreenFilterSettings.Default;
+    }
 }
